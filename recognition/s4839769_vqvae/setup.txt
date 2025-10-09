@@ -1,0 +1,5 @@
+# For conda
+conda create -n vqvae_env python=3.9
+conda activate vqvae_env
+
+pip install -r requirements.txt

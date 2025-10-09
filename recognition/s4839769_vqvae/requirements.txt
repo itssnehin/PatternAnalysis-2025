@@ -1,0 +1,15 @@
+# Core PyTorch framework for deep learning
+torch
+torchvision
+
+# For calculating performance metrics like SSIM
+torchmetrics
+
+# For loading Nifti medical image files (.nii.gz)
+nibabel
+
+# For displaying progress bars during training
+tqdm
+
+# For plotting and saving visualization images
+matplotlib
