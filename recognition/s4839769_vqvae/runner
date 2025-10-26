@@ -1,0 +1,25 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --job-name=snehin_vqvae
+#SBATCH --output=%j_vqvae.out
+#SBATCH --error=%j_vqvae.err
+
+echo "Job ID: $SLURM_JOB_ID on $(hostname)"
+cd $SLURM_SUBMIT_DIR
+export PYTHONUNBUFFERED=1
+
+# Create local dataset copy
+# LOCAL_DATA_DIR="/tmp/cifar10_$SLURM_JOB_ID"
+# mkdir -p $LOCAL_DATA_DIR
+# echo "Copying dataset to local storage..."
+# cp -r /home/groups/comp3710/cifar10/* $LOCAL_DATA_DIR/
+
+# Activate conda environment
+conda activate comp3710
+
+# Run main
+python main.py 
+echo "Job finished at $(date)"
