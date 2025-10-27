@@ -4,7 +4,7 @@ Demonstrates the usage of a trained VQ-VAE model and reports SSIM score.
 import os
 import torch
 from torchvision.utils import save_image
-from torchmetrics import StructuralSimilarityIndexMeasure # <-- IMPORT SSIM
+from torchmetrics import StructuralSimilarityIndexMeasure
 
 from config import cfg
 from modules import VQVAE

@@ -31,10 +31,10 @@ def main():
     
     parser.add_argument(
         'mode',
-        choices=['train', 'predict'],
+        choices=['train', 'generate'],
         help="Specify the operation to perform:\n"
              "  train   - Start or resume training the model.\n"
-             "  predict - Generate reconstructions using a trained model."
+             "  generate - Generate reconstructions using a trained model."
     )
     
     args = parser.parse_args()
