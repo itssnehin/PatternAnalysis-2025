@@ -55,7 +55,7 @@ def main():
             print(f"\nAn error occurred during training: {e}")
             # Optionally add more detailed error logging here
             
-    elif args.mode == 'predict':
+    elif args.mode == 'generate':
         try:
             predict()
         except Exception as e:
