@@ -46,6 +46,8 @@ class Config:
     LOG_FREQ = 100 
     # Frequency to save a grid of reconstructed images (in number of epochs)
     SAVE_IMAGE_EPOCH = 5
+    # Early stopping if SSIM score >= 0.7 
+    EARLY_STOP_SSIM = 0.70
 
 # Create a global instance of the configuration
 cfg = Config()

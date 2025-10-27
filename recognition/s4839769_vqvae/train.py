@@ -6,6 +6,7 @@ The core training and validation loop for the VQ-VAE model.
 - Calculates reconstruction and VQ losses.
 - Evaluates the model using SSIM on a validation set.
 - Saves the best model based on SSIM and periodic image samples.
+- Includes an early stopping mechanism based on a target SSIM score.
 """
 import os
 import torch
@@ -43,11 +44,8 @@ def train_model():
         return
 
     # --- 2. Initialize Metrics and Tracking Variables ---
-    # The data is normalized to [-1, 1], so the range is 2.0
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     best_ssim = 0.0
-    
-    # Get a fixed batch from the validation loader for consistent visualization
     fixed_val_images = next(iter(val_loader)).to(device)
 
     # --- 3. The Main Training Loop ---
@@ -60,16 +58,10 @@ def train_model():
         for batch_idx, data in enumerate(tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training]")):
             data = data.to(device)
             optimizer.zero_grad()
-
             vq_loss, data_recon = model(data)
-            
-            # Reconstruction loss (how well the image is rebuilt)
             recon_loss = F.mse_loss(data_recon, data)
-            
-            # The total loss is the sum of reconstruction and VQ-related losses
             loss = recon_loss + vq_loss
             loss.backward()
-
             optimizer.step()
             train_recon_loss += recon_loss.item()
         
@@ -83,17 +75,13 @@ def train_model():
             for data in tqdm(val_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Validation]"):
                 data = data.to(device)
                 _, data_recon = model(data)
-                
                 recon_loss = F.mse_loss(data_recon, data)
                 val_recon_loss += recon_loss.item()
-                
-                # Update the SSIM metric with the new batch
                 ssim_metric.update(data_recon, data)
 
         avg_val_loss = val_recon_loss / len(val_loader)
-        # Compute the final SSIM score for the entire validation set
         epoch_ssim = ssim_metric.compute()
-        ssim_metric.reset() # Reset metric for the next epoch
+        ssim_metric.reset()
 
         print(
             f"Epoch: {epoch}/{cfg.EPOCHS} | "
@@ -103,23 +91,25 @@ def train_model():
         )
 
         # --- 4. Checkpointing and Saving ---
-        # Save the model if it has the best SSIM score so far
         if epoch_ssim > best_ssim:
             best_ssim = epoch_ssim
             model_path = os.path.join(cfg.CHECKPOINT_DIR, "vqvae_best_model.pth")
             torch.save(model.state_dict(), model_path)
             print(f"✨ New best model saved with SSIM: {best_ssim:.4f} ✨")
 
-        # Save a sample of reconstructed images periodically
         if epoch % cfg.SAVE_IMAGE_EPOCH == 0 or epoch == cfg.EPOCHS:
             with torch.no_grad():
                 _, reconstructed_samples = model(fixed_val_images)
-                
-            # Create a grid of original vs. reconstructed
             comparison_grid = torch.cat([fixed_val_images[:8], reconstructed_samples[:8]])
             img_path = os.path.join(cfg.CHECKPOINT_DIR, f"reconstruction_epoch_{epoch}.png")
             save_image(comparison_grid.cpu(), img_path, nrow=8, normalize=True)
             print(f"Saved sample reconstruction grid to {img_path}")
+
+        # --- 5. EARLY STOPPING CHECK (NEW CODE) ---
+        if best_ssim >= cfg.EARLY_STOP_SSIM:
+            print(f"\n--- Early stopping triggered! ---")
+            print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
+            break # Exit the training loop
 
     print("\nTraining complete!")
     print(f"Best validation SSIM achieved: {best_ssim:.4f}")
