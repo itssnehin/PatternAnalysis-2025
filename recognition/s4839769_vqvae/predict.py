@@ -75,7 +75,7 @@ def predict():
     grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
     grid_pil = transforms.ToPILImage()(grid_tensor)
     
-    label_width = 150 # Adjusted space
+    label_width = 200 # Adjusted space
     canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
     canvas.paste(grid_pil, (label_width, 0))
     

@@ -10,7 +10,7 @@ import os # Import os for path joining
 class Config:
     # --- General Project Settings ---
     DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    SEED = 42
+    # SEED = 42
     PROJECT_NAME = "snehin_HipMRI_VQVAE"
     
     # --- Dataset Settings ---
@@ -21,15 +21,15 @@ class Config:
     LOCAL_DATASET_ROOT = os.path.join('HipMRI_Study_open', 'keras_slices_data')
     
     # The HipMRI slices are of different sizes. We will resize them to a consistent dimension.
-    IMAGE_SIZE = 128 
+    IMAGE_SIZE = 128
     IN_CHANNELS = 1  # MRI scans are grayscale
 
     # --- Training Settings ---
-    EPOCHS = 100
+    EPOCHS = 60
     BATCH_SIZE = 64
     LEARNING_RATE = 1e-4
     NUM_WORKERS = 8 # For the DataLoader on Rangpur. May need to be 0 for local Windows.
-    EARLY_STOP_SSIM = 0.75 # can set to None to disable
+    EARLY_STOP_SSIM = None # can set to None to disable
     ALPHA = 0.1 # Weight Factor
     # --- VQ-VAE Model Hyperparameters ---
     HIDDEN_CHANNELS = 128
@@ -37,12 +37,12 @@ class Config:
     RES_CHANNELS = 64
 
     # --- Vector Quantizer (Codebook) Settings ---
-    NUM_EMBEDDINGS = 1024 
+    NUM_EMBEDDINGS = 512 
     EMBEDDING_DIM = 128 
     COMMITMENT_COST = 0.25
 
     # --- Logging and Checkpointing ---
-    CHECKPOINT_DIR = f'./checkpoints/{PROJECT_NAME}'
+    CHECKPOINT_DIR = f'./checkpoints/'
     LOG_FREQ = 100 
     SAVE_IMAGE_EPOCH = 5
 

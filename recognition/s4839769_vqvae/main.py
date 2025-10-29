@@ -19,17 +19,14 @@ Usage:
 """
 import argparse
 import torch
-import os # Import os for checking directories
+import os
 
 from train import train_model
 from predict import predict
+from train_pixelcnn import train_pixelcnn # NEW IMPORT
 from config import cfg
 
 def main():
-    """
-    Parses command-line arguments and runs the specified mode (train or predict).
-    """
-    # --- Argument Parsing ---
     parser = argparse.ArgumentParser(
         description="VQ-VAE on HipMRI Dataset",
         formatter_class=argparse.RawTextHelpFormatter
@@ -37,22 +34,16 @@ def main():
     
     parser.add_argument(
         'mode',
-        choices=['train', 'predict'],
+        choices=['train', 'train_pixelcnn', 'predict'], # NEW CHOICE
         help="Specify the operation to perform:\n"
-             "  train   - Start or resume training the model.\n"
-             "  predict - Generate reconstructions using a trained model."
+             "  train          - Train the VQ-VAE model.\n"
+             "  train_pixelcnn - Train the PixelCNN prior over the VQ-VAE's latents.\n"
+             "  predict        - Generate images using both trained models."
     )
     
-    # --- ADD THE NEW --local FLAG ---
-    parser.add_argument(
-        '--local',
-        action='store_true', # This makes it a flag, e.g., --local
-        help="Run in local mode. Uses the dataset path defined in 'LOCAL_DATASET_ROOT'."
-    )
-    
+    parser.add_argument('--local', action='store_true', help="Run in local mode.")
     args = parser.parse_args()
     
-    # --- Welcome Message ---
     print("=" * 50)
     print(f"Starting Project: {cfg.PROJECT_NAME}")
     print(f"Selected Mode: {args.mode.upper()}")
@@ -81,16 +72,23 @@ def main():
     if args.mode == 'train':
         try:
             train_model()
-        except KeyboardInterrupt:
-            print("\nTraining interrupted by user. Exiting.")
-        except Exception as e:
-            print(f"\nAn error occurred during training: {e}")
+            print("\nVQ-VAE training finished. Now you can train the PixelCNN prior by running:")
+            print("python main.py train_pixelcnn --local")
+        except Exception as e: print(f"\nAn error occurred during VQ-VAE training: {e}")
             
+    # --- NEW MODE ---
+    elif args.mode == 'train_pixelcnn':
+        try:
+            train_pixelcnn()
+            print("\nPixelCNN training finished. Now you can generate images by running:")
+            print("python main.py predict --local")
+        except Exception as e: print(f"\nAn error occurred during PixelCNN training: {e}")
+
     elif args.mode == 'predict':
         try:
+            # (Predict logic is unchanged for now, we will update it next)
             predict()
-        except Exception as e:
-            print(f"\nAn error occurred during prediction: {e}")
+        except Exception as e: print(f"\nAn error occurred during prediction: {e}")
 
 if __name__ == '__main__':
     main()

@@ -1,17 +1,17 @@
+# modules.py
 
 """
-Core components of the Vector-Quantized Variational Autoencoder (VQ-VAE) model.
-Contains the Encoder, Decoder, VectorQuantizer, and the main VQVAE module.
-This version includes Residual Blocks for a more powerful architecture.
+Core components of the VQ-VAE and PixelCNN models.
+- VQ-VAE: Encoder, Decoder, VectorQuantizer, Residual Blocks.
+- PixelCNN: Masked Convolution and the main PixelCNN architecture.
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# --- VQ-VAE Components (Largely Unchanged) ---
+
 class ResidualBlock(nn.Module):
-    """
-    A simple Residual Block with two convolutional layers.
-    """
     def __init__(self, in_channels, res_channels, out_channels):
         super(ResidualBlock, self).__init__()
         self.block = nn.Sequential(
@@ -20,14 +20,10 @@ class ResidualBlock(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(res_channels, out_channels, kernel_size=1, stride=1, bias=False)
         )
-
     def forward(self, x):
         return x + self.block(x)
 
 class Encoder(nn.Module):
-    """
-    The Encoder network with Residual Blocks to compress the input image.
-    """
     def __init__(self, in_channels, hidden_channels, num_res_blocks, res_channels):
         super(Encoder, self).__init__()
         self.layers = nn.Sequential(
@@ -36,44 +32,32 @@ class Encoder(nn.Module):
             nn.Conv2d(hidden_channels // 2, hidden_channels, kernel_size=4, stride=2, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, stride=1, padding=1),
-            # Add a sequence of Residual Blocks
             *[ResidualBlock(hidden_channels, res_channels, hidden_channels) for _ in range(num_res_blocks)],
             nn.ReLU(inplace=True)
         )
-
     def forward(self, x):
         return self.layers(x)
 
 class Decoder(nn.Module):
-    """
-    The Decoder network with Residual Blocks to reconstruct the image.
-    """
     def __init__(self, in_channels, hidden_channels, out_channels, num_res_blocks, res_channels):
         super(Decoder, self).__init__()
         self.layers = nn.Sequential(
             nn.Conv2d(in_channels, hidden_channels, kernel_size=3, stride=1, padding=1),
-            # Add a sequence of Residual Blocks
             *[ResidualBlock(hidden_channels, res_channels, hidden_channels) for _ in range(num_res_blocks)],
             nn.ReLU(inplace=True),
-            # Upsample twice to return to original size
             nn.ConvTranspose2d(hidden_channels, hidden_channels // 2, kernel_size=4, stride=2, padding=1),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(hidden_channels // 2, out_channels, kernel_size=4, stride=2, padding=1)
         )
-
     def forward(self, x):
         return self.layers(x)
 
 class VectorQuantizer(nn.Module):
-    """
-    The core Vector Quantizer layer. No changes needed here.
-    """
     def __init__(self, num_embeddings, embedding_dim, commitment_cost):
         super(VectorQuantizer, self).__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self.commitment_cost = commitment_cost
-        
         self.embedding = nn.Embedding(self.num_embeddings, self.embedding_dim)
         self.embedding.weight.data.uniform_(-1./self.num_embeddings, 1./self.num_embeddings)
 
@@ -102,16 +86,11 @@ class VectorQuantizer(nn.Module):
         return loss, quantized
 
 class VQVAE(nn.Module):
-    """
-    The complete VQ-VAE model. We update this to pass parameters to the new Decoder.
-    """
     def __init__(self, in_channels, hidden_channels, out_channels, num_res_blocks, res_channels,
                 num_embeddings, embedding_dim, commitment_cost):
         super(VQVAE, self).__init__()
-        
         self.encoder = Encoder(in_channels, hidden_channels, num_res_blocks, res_channels)
         self.vq_layer = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
-        # --- UPDATED DECODER CALL ---
         self.decoder = Decoder(embedding_dim, hidden_channels, out_channels, num_res_blocks, res_channels)
 
     def forward(self, x):
@@ -119,3 +98,67 @@ class VQVAE(nn.Module):
         vq_loss, quantized_z = self.vq_layer(z)
         x_recon = self.decoder(quantized_z)
         return vq_loss, x_recon
+
+    # --- NEW HELPER FUNCTION ---
+    def get_code_indices(self, x):
+        """Encodes an image and returns the discrete codebook indices."""
+        z = self.encoder(x)
+        z_permuted = z.permute(0, 2, 3, 1).contiguous()
+        flat_z = z_permuted.view(-1, self.vq_layer.embedding_dim)
+        
+        distances = (torch.sum(flat_z**2, dim=1, keepdim=True) 
+                    + torch.sum(self.vq_layer.embedding.weight**2, dim=1)
+                    - 2 * torch.matmul(flat_z, self.vq_layer.embedding.weight.t()))
+            
+        indices = torch.argmin(distances, dim=1)
+        return indices.view(z.shape[0], z.shape[2], z.shape[3]) # Reshape to [B, H, W]
+
+# --- NEW PIXELCNN COMPONENTS ---
+
+class MaskedConv2d(nn.Conv2d):
+    """
+    A Convolutional layer with a mask to respect the autoregressive property.
+    For the first layer (type 'A'), it masks the center pixel.
+    For subsequent layers (type 'B'), it allows the center pixel to see itself.
+    """
+    def __init__(self, mask_type, *args, **kwargs):
+        super(MaskedConv2d, self).__init__(*args, **kwargs)
+        assert mask_type in {'A', 'B'}
+        self.register_buffer('mask', self.weight.data.clone())
+        
+        h, w = self.kernel_size
+        self.mask.fill_(1)
+        self.mask[:, :, h // 2, w // 2 + (mask_type == 'B'):] = 0
+        self.mask[:, :, h // 2 + 1:] = 0
+
+    def forward(self, x):
+        self.weight.data *= self.mask
+        return super(MaskedConv2d, self).forward(x)
+
+class PixelCNN(nn.Module):
+    """
+    The PixelCNN model that learns the prior distribution over the discrete latent space.
+    """
+    def __init__(self, num_embeddings, hidden_dim=256, num_layers=7):
+        super(PixelCNN, self).__init__()
+        
+        # The PixelCNN needs an embedding layer for the input indices
+        self.embedding = nn.Embedding(num_embeddings, hidden_dim)
+        
+        layers = [MaskedConv2d('A', hidden_dim, hidden_dim, kernel_size=7, padding=3)]
+        for _ in range(num_layers - 1):
+            layers.append(nn.ReLU(True))
+            layers.append(MaskedConv2d('B', hidden_dim, hidden_dim, kernel_size=7, padding=3))
+        
+        # A final conv layer to produce the output logits
+        layers.extend([
+            nn.ReLU(True),
+            nn.Conv2d(hidden_dim, num_embeddings, kernel_size=1)
+        ])
+        
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        # x is the input tensor of code indices, shape [B, H, W]
+        x = self.embedding(x.long()).permute(0, 3, 1, 2) # To [B, C, H, W]
+        return self.net(x)
