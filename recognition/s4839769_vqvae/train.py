@@ -12,7 +12,7 @@ import os
 import torch
 import torch.nn.functional as F
 from torchvision.utils import make_grid
-from torchmetrics import StructuralSimilarityIndexMeasure
+from torchmetrics.image import StructuralSimilarityIndexMeasure 
 from tqdm import tqdm
 from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms as transforms
@@ -74,9 +74,8 @@ def train_model():
     
     # --- NEW: Initialize an SSIM function specifically for the training loss ---
     ssim_loss_fn = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
-    
-    # This SSIM metric is for validation reporting
     ssim_val_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
+    
     best_ssim = 0.0
     fixed_val_images = next(iter(val_loader)).to(device)
     
@@ -94,7 +93,7 @@ def train_model():
 
             vq_loss, data_recon = model(data)
             
-            # --- NEW LOSS CALCULATION ---
+            # --- LOSS CALCULATION ---
             # 1. Pixel-wise reconstruction loss
             mse_loss = F.mse_loss(data_recon, data)
             # 2. Structural similarity loss. Score is [0, 1], so loss is 1 - score.
@@ -103,7 +102,8 @@ def train_model():
             # Combine the two reconstruction losses. A weight (alpha) can be added.
             # e.g., recon_loss = alpha * mse_loss + (1-alpha) * ssim_loss
             # For simplicity, we'll weight them equally for now.
-            recon_loss = mse_loss + ssim_loss
+            alpha = cfg.ALPHA
+            recon_loss = mse_loss + (alpha* ssim_loss)
             
             # Final total loss to backpropagate
             loss = recon_loss + vq_loss

@@ -30,7 +30,7 @@ class Config:
     LEARNING_RATE = 1e-4
     NUM_WORKERS = 4 # For the DataLoader on Rangpur. May need to be 0 for local Windows.
     EARLY_STOP_SSIM = 0.70
-
+    ALPHA = 0.1 # Weight Factor
     # --- VQ-VAE Model Hyperparameters ---
     HIDDEN_CHANNELS = 128
     NUM_RES_BLOCKS = 2
