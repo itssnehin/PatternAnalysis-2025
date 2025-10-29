@@ -3,6 +3,8 @@
 """
 The core training and validation loop for the VQ-VAE model.
 - Uses a WEIGHTED combined MSE + SSIM loss for stable training.
+- Includes a ReduceLROnPlateau learning rate scheduler to prevent collapse.
+- Evaluates the model using SSIM on a validation set.
 - Saves the best model based on SSIM and periodic, labeled image samples.
 - Includes a robust early stopping mechanism that saves a final image.
 - Plots the training history (loss and SSIM) at the end of training.
@@ -11,7 +13,7 @@ import os
 import torch
 import torch.nn.functional as F
 from torchvision.utils import make_grid
-from torchmetrics.image import StructuralSimilarityIndexMeasure 
+from torchmetrics.image import StructuralSimilarityIndexMeasure
 from tqdm import tqdm
 from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms as transforms
@@ -22,23 +24,31 @@ from modules import VQVAE
 from dataset import get_dataloaders
 
 def plot_training_progress(history, save_path):
-    """Plots and saves the training and validation loss, and validation SSIM."""
-    # (This function is correct and does not need changes)
+    """
+    Plots and saves the training and validation loss, and validation SSIM.
+    """
     print(f"Plotting training progress to {save_path}...")
+    
     epochs = range(1, len(history['train_loss']) + 1)
+    
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    
+    # Subplot 1: Loss
     ax1.plot(epochs, history['train_loss'], 'bo-', label='Training Total Loss')
     ax1.plot(epochs, history['val_loss'], 'ro-', label='Validation Loss (MSE)')
     ax1.set_title('Training and Validation Loss')
     ax1.set_ylabel('Loss')
     ax1.legend()
     ax1.grid(True)
+    
+    # Subplot 2: SSIM
     ax2.plot(epochs, history['val_ssim'], 'go-', label='Validation SSIM')
     ax2.set_title('Validation SSIM')
     ax2.set_xlabel('Epochs')
     ax2.set_ylabel('SSIM Score')
     ax2.legend()
     ax2.grid(True)
+    
     plt.tight_layout()
     plt.savefig(save_path)
     plt.close()
@@ -51,7 +61,7 @@ def save_reconstruction_image(model, images, epoch_label, save_dir):
     all_images_tensor = torch.cat([images[:8], reconstructed_samples[:8]])
     grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
     grid_pil = transforms.ToPILImage()(grid_tensor)
-    label_width = 200
+    label_width = 150
     canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
     canvas.paste(grid_pil, (label_width, 0))
     draw = ImageDraw.Draw(canvas)
@@ -63,7 +73,6 @@ def save_reconstruction_image(model, images, epoch_label, save_dir):
     for i, label in enumerate(labels):
         draw.text((10, y_positions[i]), label, fill="black", font=font)
     
-    # Use the epoch_label in the filename
     img_path = os.path.join(save_dir, f"reconstruction_{epoch_label}_labeled.png")
     canvas.save(img_path)
     print(f"Saved labeled sample reconstruction grid to {img_path}")
@@ -85,67 +94,67 @@ def train_model():
     
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        mode='max',      # Monitor a metric that should be maximized
-        factor=0.5,      # Reduce LR by half
-        patience=5,      # Wait 5 epochs with no SSIM improvement before reducing
-        verbose=True     # Print a message when LR is reduced
+        mode='max',
+        factor=0.5,
+        patience=5,
     )
-
 
     try: train_loader, val_loader = get_dataloaders()
     except (ValueError, FileNotFoundError) as e:
         print(f"ERROR: Could not load data. {e}")
         return
 
-    ssim_loss_fn = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
+    #ssim_loss_fn = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     ssim_val_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     best_ssim = 0.0
     fixed_val_images = next(iter(val_loader)).to(device)
     history = {'train_loss': [], 'val_loss': [], 'val_ssim': []}
-    
-    # Flag to track if we stopped early
     early_stop_triggered = False
 
-    print("Starting training with WEIGHTED combined MSE + SSIM loss...")
+    print("Starting training with L1 reconstruction loss and LR Scheduler...")
     for epoch in range(1, cfg.EPOCHS + 1):
-        # (Training and Validation Phases are unchanged)
+        # --- Training Phase ---
         model.train()
         train_total_loss = 0.0
         for data in tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training]"):
             data = data.to(device)
             optimizer.zero_grad()
             vq_loss, data_recon = model(data)
-            mse_loss = F.mse_loss(data_recon, data)
-            ssim_loss = 1.0 - ssim_loss_fn(data_recon, data)
-            alpha = cfg.ALPHA
-            recon_loss = mse_loss + (alpha * ssim_loss)
+            #mse_loss = F.mse_loss(data_recon, data)
+            #ssim_loss = 1.0 - ssim_loss_fn(data_recon, data)
+            #alpha = cfg.ALPHA
+            recon_loss = F.l1_loss(data_recon, data)
             loss = recon_loss + vq_loss
             loss.backward()
             optimizer.step()
             train_total_loss += loss.item()
         avg_train_loss = train_total_loss / len(train_loader)
 
+        # --- Validation Phase ---
         model.eval()
         val_recon_loss = 0.0
         with torch.no_grad():
             for data in tqdm(val_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Validation]"):
                 data = data.to(device)
                 _, data_recon = model(data)
-                val_recon_loss += F.mse_loss(data_recon, data).item()
+                val_recon_loss += F.l1_loss(data_recon, data).item()
                 ssim_val_metric.update(data_recon, data)
         avg_val_loss = val_recon_loss / len(val_loader)
         epoch_ssim = ssim_val_metric.compute()
         ssim_val_metric.reset()
         
+        # Get the learning rate BEFORE the scheduler step.
+        old_lr = optimizer.param_groups[0]['lr']
+        
+        # Step the scheduler with the metric.
         scheduler.step(epoch_ssim)
-
-        print(
-            f"Epoch: {epoch}/{cfg.EPOCHS} | "
-            f"Train Total Loss: {avg_train_loss:.4f} | "
-            f"Val Recon Loss (MSE): {avg_val_loss:.4f} | "
-            f"Val SSIM: {epoch_ssim:.4f}"
-        )
-
+        
+        # Get the learning rate AFTER the scheduler step.
+        new_lr = optimizer.param_groups[0]['lr']
+        
+        # Check if the learning rate has changed and print a message.
+        if new_lr < old_lr:
+            print(f"INFO: Learning rate reduced from {old_lr:.6f} to {new_lr:.6f}")
 
         print(
             f"Epoch: {epoch}/{cfg.EPOCHS} | "
@@ -176,18 +185,15 @@ def train_model():
                 early_stop_triggered = True
                 break
 
-    # --- NEW LOGIC AFTER THE LOOP ---
-    # Always save a final image, labeled appropriately
+    # Save final image and plot history
     final_epoch_label = f"epoch_{epoch:03d}"
     if early_stop_triggered:
         final_epoch_label += "_final_early_stop"
-    else: # This handles the case where all epochs complete
+    else:
         final_epoch_label += "_final"
     
     print(f"\nSaving final reconstruction image for epoch {epoch}...")
-    # Load the BEST model to ensure the final image reflects the best performance
     model.load_state_dict(torch.load(os.path.join(cfg.CHECKPOINT_DIR, "vqvae_best_model.pth"), weights_only=True))
-
     save_reconstruction_image(model, fixed_val_images, final_epoch_label, cfg.CHECKPOINT_DIR)
 
     plot_path = os.path.join(cfg.CHECKPOINT_DIR, f"{cfg.PROJECT_NAME}_training_progress.png")

@@ -50,8 +50,6 @@ def train_pixelcnn():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     num_epochs = 50 
     
-
-    
     print("Starting PixelCNN training...")
     for epoch in range(1, num_epochs + 1):
         pixelcnn_model.train()

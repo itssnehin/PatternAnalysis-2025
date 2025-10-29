@@ -27,9 +27,9 @@ class Config:
     # --- Training Settings ---
     EPOCHS = 100
     BATCH_SIZE = 64
-    LEARNING_RATE = 5e-5
+    LEARNING_RATE = 1e-4
     NUM_WORKERS = 8 # For the DataLoader on Rangpur. May need to be 1 for local Windows.
-    EARLY_STOP_SSIM = None # can set to None to disable
+    EARLY_STOP_SSIM = 0.75 # can set to None to disable
     ALPHA = 0.1 # Weight Factor
     # --- VQ-VAE Model Hyperparameters ---
     HIDDEN_CHANNELS = 128
