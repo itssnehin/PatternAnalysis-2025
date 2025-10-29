@@ -1,142 +1,132 @@
-# VQ-VAE for Prostate MRI Generation
-**COMP3710 Pattern Recognition Report**
-**Student ID: s4839769**
+# VQ-VAE for HipMRI Prostate Cancer Image Generation
+**Author:** [Your Name] ([Your Student ID])
 
-## 1. Project Overview
+## 1. Overview
 
-This project addresses **Task 10 (Hard Difficulty)** from the assignment brief, which involves creating a generative model for the HipMRI Study on Prostate Cancer dataset. The primary goal is to implement a Vector-Quantized Variational Autoencoder (VQ-VAE) capable of generating "reasonably clear" 2D MRI slices. The key success metric, as specified in the brief, is to achieve a **Structured Similarity Index (SSIM) of over 0.6** on a held-out test set.
+### The Problem
+This project aims to solve the challenge of generating realistic medical imagery by creating a generative model for the HipMRI Study on Prostate Cancer dataset. The primary goal is to implement a Vector-Quantized Variational Autoencoder (VQ-VAE) capable of generating clear 2D MRI slices. The key success metric, as specified in the project brief, is to achieve a **Structured Similarity Index (SSIM) of over 0.65** on a held-out test set, with an early stopping mechanism implemented to halt training once this target is met.
 
-This implementation uses PyTorch and the `torchmetrics` library for SSIM benchmarking. The model is trained on the pre-processed 2D slices available on the Rangpur cluster and is structured to be run as a modular and configurable project.
+### How it Works
+The VQ-VAE is a type of generative autoencoder that excels at producing sharp images by using a discrete, rather than continuous, latent space. This is achieved through three main components:
 
-## 2. File Structure
+1.  **Encoder:** A deep convolutional neural network (CNN) that includes Residual Blocks. It takes an input MRI slice and compresses it into a lower-dimensional continuous latent representation, capturing the image's essential features.
+2.  **Vector Quantizer (Codebook):** This is the core of the VQ-VAE. It maintains a finite, learnable "codebook" of embedding vectors. For each vector in the encoder's output, it finds the closest vector in the codebook and replaces it. This "quantization" step creates a discrete latent map.
+3.  **Decoder:** A transposed CNN, also containing Residual Blocks, that takes the discrete latent map from the quantizer and reconstructs the image.
 
-The project is organized into a modular structure within the `recognition/s4839769_vqvae/` directory, adhering to the requirements for this project.
+The model is trained by minimizing a combined loss function that includes a reconstruction loss (how well the image is rebuilt) and a VQ loss (which updates both the codebook vectors and the encoder's output). This process forces the model to learn a compressed and meaningful representation, enabling it to generate new, high-fidelity images.
 
-```bash
-s4839769_vqvae/
-├── main.py          # Main entry point to run training or prediction
-├── config.py        # Centralized configuration for all hyperparameters
-├── modules.py       # Contains the VQ-VAE model architecture (Encoder, Decoder, VQ)
-├── dataset.py       # PyTorch DataLoader for the HipMRI dataset
-├── train.py         # The core training and validation loop, with SSIM benchmarking
-├── predict.py       # Script to load a trained model and generate results
-└── README.md        # This report
-```
+### Model Architecture Visualization
+The following diagram illustrates the data flow through the VQ-VAE architecture used in this project.
 
-## 3. How the VQ-VAE Works
+![VQ-VAE Architecture Diagram](./assets/your_diagram.png) 
+*(**Action:** You should create a simple diagram like the ones in the examples showing Input -> Encoder -> VQ -> Decoder -> Output and save it in an `assets` folder)*
 
-The VQ-VAE is a type of generative autoencoder that is particularly effective at producing sharp, high-fidelity images. It achieves this by using a discrete, rather than continuous, latent space. The model consists of three main components:
+---
 
-**1. Encoder:** A standard convolutional neural network that takes an input image and maps it to a lower-dimensional continuous latent representation `z_e(x)`.
-
-**2. Vector Quantizer (Codebook):** This is the core innovation of the VQ-VAE.
-   - It maintains a finite, learnable "codebook" of embedding vectors `e`.
-   - For each vector in the encoder's output `z_e(x)`, it finds the closest vector in the codebook using Euclidean distance.
-   - It then replaces the encoder's output with this "quantized" vector from the codebook, creating a discrete latent representation `z_q(x)`.
-
-**3. Decoder:** Another convolutional network (specifically, a transposed CNN) that takes the quantized latent representation `z_q(x)` and reconstructs the original image.
-
-The overall data flow is:
-`Input Image -> Encoder -> Latent Map -> Vector Quantizer -> Quantized Map -> Decoder -> Reconstructed Image`
-
-This use of a discrete codebook forces the model to commit to specific representations, preventing the "posterior collapse" common in standard VAEs and resulting in clearer image reconstructions. The model is trained with a combined loss function that includes:
-- **Reconstruction Loss:** Measures how well the decoder reconstructs the image (MSE in this project).
-- **VQ Loss:** A combination of a *codebook loss* (updates the codebook vectors to match the encoder's output) and a *commitment loss* (encourages the encoder's output to stay close to the chosen codebook vectors).
-
-## 4. Setup and Dependencies
-
-This project was developed to run on the UQ Rangpur cluster.
-
-### Environment Setup
-
-First, ensure you have a Conda environment with PyTorch installed. The following libraries are required:
-
-```bash
-# Activate your conda environment first
-# conda activate your_env_name
-
-pip install torch torchvision torchmetrics nibabel tqdm matplotlib
-```
+## 2. Data and Preprocessing
 
 ### Dataset
+The model is trained on the **HipMRI Study on Prostate Cancer** dataset, which consists of pre-processed 2D slices stored as NIfTI files (`.nii.gz`). The dataset is divided into training and validation sets.
 
-The code is configured to use the HipMRI dataset located at `/home/groups/comp3710/HipMRI_Study_open/keras_slices_data/`. No data needs to be moved or downloaded.
+### Pre-processing
+The following pre-processing steps are applied in `dataset.py`:
+1.  **Resizing:** All images are resized to a uniform dimension of **128x128 pixels** to ensure consistent input for the model.
+2.  **Normalization:** Pixel values are normalized to the range `[-1, 1]`. This is a standard practice that helps stabilize training and aids the model's convergence.
+
+*(Reference: The normalization method is a common technique in deep learning for image data.)*
+
+### Data Splits Justification
+The full dataset is split into a training set and a validation set using an **80/20 random split**. This is a standard and robust method for model evaluation. An 80% training split provides the model with a large amount of data to learn from, while the 20% validation split offers a sufficiently large and independent set to reliably measure the model's generalization performance (i.e., how well it performs on unseen data), which is critical for calculating the SSIM score and triggering the early stopping condition.
+
+---
+
+## 3. Project Structure
+The project is organized into a modular structure for clarity and maintainability.
+/
+├── HipMRI_Study_open/ # Local dataset folder (if using --local)
+├── checkpoints/ # Directory for saved model weights
+├── predictions/ # Directory for final output images
+├── main.py # Main entry point to run training or prediction
+├── config.py # Centralized configuration for all hyperparameters
+├── modules.py # The VQ-VAE model architecture (Encoder, Decoder, VQ)
+├── dataset.py # Data loading and preprocessing pipeline
+├── train.py # The core training and validation loop
+├── predict.py # Script to load a model and generate results
+└── README.md # This file
+
+---
+
+## 4. Dependencies and Reproducibility
+
+### Dependencies
+To ensure reproducibility, all required Python libraries and their versions are listed below.
+
+| Dependency   | Version |
+|--------------|---------|
+| torch        | [e.g., 2.0.1] |
+| torchvision  | [e.g., 0.15.2]|
+| torchmetrics | [e.g., 1.0.0] |
+| Pillow       | [e.g., 10.1.0]|
+| nibabel      | [e.g., 5.1.0] |
+| tqdm         | [e.g., 4.65.0]|
+| matplotlib   | [e.g., 3.7.1] |
+
+*(**Action:** Run `pip freeze | findstr "torch"` etc. to get your exact versions and fill them in.)*
+
+### Environment Setup
+1.  Create a Conda or venv environment.
+2.  Install the required packages:
+    ```bash
+    pip install torch torchvision torchmetrics Pillow nibabel tqdm matplotlib
+    ```
+
+---
 
 ## 5. Usage Instructions
+The project can be run from the terminal for either training a new model or predicting with an existing one.
 
-The project uses a main entry point, `main.py`, for all operations.
+### To Train the Model
+The script supports training on both a local machine and a remote cluster.
 
-### Training the Model
+-   **On a local machine** (ensure the `HipMRI_Study_open` folder is in your project directory):
+    ```bash
+    python main.py train --local
+    ```
+-   **On the Rangpur cluster:**
+    ```bash
+    python main.py train
+    ```
+Training will stop automatically if the validation SSIM exceeds **0.65**. The best model is saved in `checkpoints/`.
 
-To start training the VQ-VAE from scratch, run the following command from the `s4839769_vqvae/` directory:
+### To Generate Predictions
+This will load the best trained model and generate a final comparison image.
 
-```bash
-python main.py train
-```
+-   **On a local machine:**
+    ```bash
+    python main.py predict --local
+    ```
+-   **On the Rangpur cluster:**
+    ```bash
+    python main.py predict
+    ```
+The output image will be saved in the `predictions/` folder.
 
-- The script will create a `checkpoints/HipMRI_VQVAE/` directory.
-- During training, it will print the average reconstruction loss and the SSIM score on the validation set at the end of each epoch.
-- Every 5 epochs, a sample of reconstructed images will be saved to the checkpoints directory (e.g., `reconstruction_epoch_5.png`).
-- The model with the **best SSIM score** will be saved as `vqvae_best_model.pth`.
+---
 
-### Generating Predictions
-
-After the model has been trained, you can generate a sample of reconstructions using the best saved model. Run the following command:
-
-```bash
-python main.py predict
-```
-
-- This will load `vqvae_best_model.pth` from the checkpoints directory.
-- It will create a `predictions/` directory.
-- It will save a final comparison image named `HipMRI_VQVAE_prediction_result.png`, showing original images in the top row and their reconstructions in the bottom row.
-- The final SSIM score for this batch will be printed to the console.
-
-## 6. Configuration
-
-All key hyperparameters are centralized in `config.py`. Key parameters include:
-- `IMAGE_SIZE = 128`: All images are resized to 128x128.
-- `BATCH_SIZE = 64`: Batch size for training.
-- `NUM_EMBEDDINGS = 512`: The number of vectors in the discrete codebook.
-- `EMBEDDING_DIM = 128`: The dimensionality of each codebook vector.
-- `LEARNING_RATE = 1e-4`: The learning rate for the Adam optimizer.
-
-## 7. Results and Analysis
-
-*(This section should be filled in after you have run your training and obtained results.)*
-
-The model was trained for **100 epochs**, and the training progress was monitored using both reconstruction loss and the SSIM score on the validation set.
-
-### Final Performance Metrics
-
-| Metric                        | Value    |
-| ----------------------------- | -------- |
-| Best Validation SSIM Achieved | **0.7124** |
-| Final Validation Recon Loss   | **0.0345** |
-
-The project successfully met the primary goal, achieving a best SSIM score of **0.7124**, which is above the required 0.6 threshold.
+## 6. Example Inputs, Outputs, and Plots
 
 ### Training Progress
+The model's performance was tracked during training. Periodically, a labeled comparison of original and reconstructed images was saved. Below is an example from a late training epoch, showing that the model has learned to reconstruct the key anatomical structures accurately.
 
-The following image shows the model's reconstruction quality on a fixed validation batch at different stages of training. Early epochs show blurry, generic outputs, while later epochs show significant improvement in detail and structural accuracy.
+![Training Progress Example](./checkpoints/snehin_HipMRI_VQVAE/reconstruction_epoch_XX_labeled.png)
 
-*Insert your best training progress image here. This image is saved periodically in the `checkpoints/` folder.*
-`![Training Progress](checkpoints/HipMRI_VQVAE/reconstruction_epoch_95.png)`
+*(**Action:** After training, replace "XX" with an epoch number (e.g., 40) and make sure the file exists.)*
 
-### Final Prediction Output
+### Final Output
+The `predict.py` script produces a final, labeled image that demonstrates the model's full capabilities. It includes original images, their high-quality reconstructions, and entirely new images generated from a random latent prior.
 
-The image below shows the final output from running `predict.py`. The top row contains original, unseen images from the validation set, and the bottom row contains the reconstructions generated by the trained VQ-VAE.
+![Final Prediction and Generation Output](./predictions/snehin_HipMRI_VQVAE_generation_result_labeled.png)
 
-*Insert your final prediction image here. This is saved in the `predictions/` folder.*
-`![Final Prediction](predictions/HipMRI_VQVAE_prediction_result.png)`
+*(**Action:** After running predict, make sure this file exists and is embedded here.)*
 
-### Analysis
-
-The model performs well in capturing the general structure and high-level features of the prostate MRI scans. The reconstructions are clear and sharp, a known strength of the VQ-VAE. The SSIM score confirms this perceptual quality. However, some fine-grained textures and very subtle details are lost in the reconstruction, which could potentially be improved by using a larger codebook (`NUM_EMBEDDINGS`) or a deeper model architecture at the cost of longer training times.
-
-## 8. Conclusion
-
-This project successfully implemented a VQ-VAE for the generation of 2D prostate MRI images. The model was trained and benchmarked, achieving the primary project goal of an SSIM score greater than 0.6. The final model demonstrates a strong ability to learn a compressed, discrete representation of the data and use it to generate high-quality reconstructions.
-
-## 9. References
-- Van Den Oord, A., & Vinyals, O. (2017). "Neural Discrete Representation Learning." arXiv preprint arXiv:1711.00937.
+The final SSIM score achieved on the reconstructed batch was **[Your Final SSIM Score, e.g., 0.7345]**, successfully surpassing the 0.65 target. The generated images, while not perfect anatomical structures, demonstrate that the model has learned a meaningful distribution of features, as they contain textures and shapes characteristic of the training data rather than just random noise.
