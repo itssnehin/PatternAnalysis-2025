@@ -14,7 +14,7 @@ class Config:
     PROJECT_NAME = "snehin_HipMRI_VQVAE"
     
     # --- Dataset Settings ---
-    # Default path for the UQ Rangpur cluster
+    # Default path for the Rangpur cluster
     DATASET_ROOT = '/home/groups/comp3710/HipMRI_Study_open/keras_slices_data/'
     
     # Path for local execution. Assumes 'HipMRI_Study_open' is in the current directory as this script.
@@ -29,7 +29,7 @@ class Config:
     BATCH_SIZE = 64
     LEARNING_RATE = 1e-4
     NUM_WORKERS = 4 # For the DataLoader on Rangpur. May need to be 0 for local Windows.
-    EARLY_STOP_SSIM = 0.65
+    EARLY_STOP_SSIM = 0.70
 
     # --- VQ-VAE Model Hyperparameters ---
     HIDDEN_CHANNELS = 128

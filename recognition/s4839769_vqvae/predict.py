@@ -71,53 +71,32 @@ def predict():
     # --- 5. Create and Save the Labeled Comparison Image (NEW LOGIC) ---
     print("Creating labeled comparison image...")
     
-    # Concatenate all image sets
-    all_images_tensor = torch.cat([
-        original_images,
-        reconstructed_images,
-        generated_images
-    ])
-    
-    # Create the grid using torchvision
+    all_images_tensor = torch.cat([original_images, reconstructed_images, generated_images])
     grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
-    
-    # Convert tensor grid to a PIL Image
     grid_pil = transforms.ToPILImage()(grid_tensor)
     
-    # --- Create a new canvas with space for labels on the left ---
-    label_width = 180  # Space for text
-    canvas_width = grid_pil.width + label_width
-    canvas_height = grid_pil.height
-    canvas = Image.new('RGB', (canvas_width, canvas_height), 'white')
-    
-    # Paste the image grid onto the canvas
+    label_width = 150 # Adjusted space
+    canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
     canvas.paste(grid_pil, (label_width, 0))
     
-    # --- Add text labels to the canvas ---
     draw = ImageDraw.Draw(canvas)
     try:
-        # Use a common font if available, otherwise fallback to default
-        font = ImageFont.truetype("arial.ttf", size=32)
+        font = ImageFont.truetype("arial.ttf", size=24) # Smaller font
     except IOError:
         font = ImageFont.load_default()
 
-    # Calculate vertical positions for each label
     row_height = grid_pil.height // 3
-    y_positions = [
-        (row_height * 0) + (row_height // 2) - 15,
-        (row_height * 1) + (row_height // 2) - 15,
-        (row_height * 2) + (row_height // 2) - 15
-    ]
     labels = ["Originals:", "Reconstructed:", "Generated:"]
+    y_positions = [(row_height * i) + (row_height // 2) - 12 for i in range(len(labels))]
     
     for i, label in enumerate(labels):
         draw.text((10, y_positions[i]), label, fill="black", font=font)
         
-    # --- Save the final labeled image ---
     output_dir = 'predictions'
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{cfg.PROJECT_NAME}_generation_result_labeled.png")
     canvas.save(output_path)
+
     
     print("-" * 50)
     print("Prediction and Generation complete!")

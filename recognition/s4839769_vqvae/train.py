@@ -104,40 +104,36 @@ def train_model():
             with torch.no_grad():
                 _, reconstructed_samples = model(fixed_val_images)
                 
-            # Combine original and reconstructed images
             all_images_tensor = torch.cat([fixed_val_images[:8], reconstructed_samples[:8]])
-            
-            # Create the grid
             grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
             grid_pil = transforms.ToPILImage()(grid_tensor)
             
-            # Create canvas and add labels
-            label_width = 180
+            label_width = 150 # Adjusted space
             canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
             canvas.paste(grid_pil, (label_width, 0))
             draw = ImageDraw.Draw(canvas)
             try:
-                font = ImageFont.truetype("arial.ttf", size=32)
+                font = ImageFont.truetype("arial.ttf", size=24) # Smaller font
             except IOError:
                 font = ImageFont.load_default()
 
             row_height = grid_pil.height // 2
             labels = ["Originals:", "Reconstructed:"]
-            y_positions = [(row_height * i) + (row_height // 2) - 15 for i in range(len(labels))]
+            y_positions = [(row_height * i) + (row_height // 2) - 12 for i in range(len(labels))]
 
             for i, label in enumerate(labels):
                 draw.text((10, y_positions[i]), label, fill="black", font=font)
             
-            # Save the final labeled image
             img_path = os.path.join(cfg.CHECKPOINT_DIR, f"reconstruction_epoch_{epoch}_labeled.png")
             canvas.save(img_path)
             print(f"Saved labeled sample reconstruction grid to {img_path}")
 
         # --- 5. EARLY STOPPING CHECK ---
-        if best_ssim >= cfg.EARLY_STOP_SSIM:
-            print(f"\n--- Early stopping triggered! ---")
-            print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
-            break
+        if cfg.EARLY_STOP_SSIM:
+            if best_ssim >= cfg.EARLY_STOP_SSIM:
+                print(f"\n--- Early stopping triggered! ---")
+                print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
+                break
 
     print("\nTraining complete!")
     print(f"Best validation SSIM achieved: {best_ssim:.4f}")
