@@ -20,15 +20,15 @@ class Config:
     # Path for local execution. Assumes 'HipMRI_Study_open' is in the current directory as this script.
     LOCAL_DATASET_ROOT = os.path.join('HipMRI_Study_open', 'keras_slices_data')
     
-    # The HipMRI slices are of different sizes. We will resize them to a consistent dimension.
+    # The HipMRI slices are of different sizes. I resized them to a consistent dimension.
     IMAGE_SIZE = 128
     IN_CHANNELS = 1  # MRI scans are grayscale
 
     # --- Training Settings ---
-    EPOCHS = 60
+    EPOCHS = 100
     BATCH_SIZE = 64
-    LEARNING_RATE = 1e-4
-    NUM_WORKERS = 8 # For the DataLoader on Rangpur. May need to be 0 for local Windows.
+    LEARNING_RATE = 5e-5
+    NUM_WORKERS = 8 # For the DataLoader on Rangpur. May need to be 1 for local Windows.
     EARLY_STOP_SSIM = None # can set to None to disable
     ALPHA = 0.1 # Weight Factor
     # --- VQ-VAE Model Hyperparameters ---

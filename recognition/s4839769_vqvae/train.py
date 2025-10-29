@@ -82,6 +82,15 @@ def train_model():
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.LEARNING_RATE)
+    
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode='max',      # Monitor a metric that should be maximized
+        factor=0.5,      # Reduce LR by half
+        patience=5,      # Wait 5 epochs with no SSIM improvement before reducing
+        verbose=True     # Print a message when LR is reduced
+    )
+
 
     try: train_loader, val_loader = get_dataloaders()
     except (ValueError, FileNotFoundError) as e:
@@ -94,7 +103,7 @@ def train_model():
     fixed_val_images = next(iter(val_loader)).to(device)
     history = {'train_loss': [], 'val_loss': [], 'val_ssim': []}
     
-    # --- NEW: Flag to track if we stopped early ---
+    # Flag to track if we stopped early
     early_stop_triggered = False
 
     print("Starting training with WEIGHTED combined MSE + SSIM loss...")
@@ -127,6 +136,16 @@ def train_model():
         avg_val_loss = val_recon_loss / len(val_loader)
         epoch_ssim = ssim_val_metric.compute()
         ssim_val_metric.reset()
+        
+        scheduler.step(epoch_ssim)
+
+        print(
+            f"Epoch: {epoch}/{cfg.EPOCHS} | "
+            f"Train Total Loss: {avg_train_loss:.4f} | "
+            f"Val Recon Loss (MSE): {avg_val_loss:.4f} | "
+            f"Val SSIM: {epoch_ssim:.4f}"
+        )
+
 
         print(
             f"Epoch: {epoch}/{cfg.EPOCHS} | "

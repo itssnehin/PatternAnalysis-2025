@@ -47,7 +47,10 @@ def train_pixelcnn():
     best_loss = float('inf')
     # The number of epochs for PixelCNN can be different, let's use a config value
     # or a hardcoded value for simplicity. 50 epochs is a good start.
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     num_epochs = 50 
+    
+
     
     print("Starting PixelCNN training...")
     for epoch in range(1, num_epochs + 1):
@@ -72,9 +75,12 @@ def train_pixelcnn():
             optimizer.step()
             total_loss += loss.item()
             
+        scheduler.step()
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch: {epoch}/{num_epochs} | Average Loss: {avg_loss:.4f}")
-        
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Epoch: {epoch}/{num_epochs} | Average Loss: {avg_loss:.4f} | Current LR: {current_lr:.6f}")
+
         # Save the best model
         if avg_loss < best_loss:
             best_loss = avg_loss
