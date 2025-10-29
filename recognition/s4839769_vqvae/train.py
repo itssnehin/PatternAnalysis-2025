@@ -2,10 +2,9 @@
 
 """
 The core training and validation loop for the VQ-VAE model.
-- Uses a combined MSE + SSIM loss for a balance of pixel and structural accuracy.
-- Evaluates the model using SSIM on a validation set.
+- Uses a WEIGHTED combined MSE + SSIM loss for stable training.
 - Saves the best model based on SSIM and periodic, labeled image samples.
-- Includes an early stopping mechanism based on a target SSIM score.
+- Includes a robust early stopping mechanism that saves a final image.
 - Plots the training history (loss and SSIM) at the end of training.
 """
 import os
@@ -17,17 +16,14 @@ from tqdm import tqdm
 from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-# --- LPIPS is no longer needed ---
-# import lpips 
 
 from config import cfg
 from modules import VQVAE
 from dataset import get_dataloaders
 
 def plot_training_progress(history, save_path):
-    """
-    Plots and saves the training and validation loss, and validation SSIM.
-    """
+    """Plots and saves the training and validation loss, and validation SSIM."""
+    # (This function is correct and does not need changes)
     print(f"Plotting training progress to {save_path}...")
     epochs = range(1, len(history['train_loss']) + 1)
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
@@ -48,10 +44,32 @@ def plot_training_progress(history, save_path):
     plt.close()
     print("Plotting complete.")
 
+def save_reconstruction_image(model, images, epoch_label, save_dir):
+    """A helper function to generate and save a labeled reconstruction image."""
+    with torch.no_grad():
+        _, reconstructed_samples = model(images)
+    all_images_tensor = torch.cat([images[:8], reconstructed_samples[:8]])
+    grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
+    grid_pil = transforms.ToPILImage()(grid_tensor)
+    label_width = 150
+    canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
+    canvas.paste(grid_pil, (label_width, 0))
+    draw = ImageDraw.Draw(canvas)
+    try: font = ImageFont.truetype("arial.ttf", size=24)
+    except IOError: font = ImageFont.load_default()
+    row_height = grid_pil.height // 2
+    labels = ["Originals:", "Reconstructed:"]
+    y_positions = [(row_height * i) + (row_height // 2) - 12 for i in range(len(labels))]
+    for i, label in enumerate(labels):
+        draw.text((10, y_positions[i]), label, fill="black", font=font)
+    
+    # Use the epoch_label in the filename
+    img_path = os.path.join(save_dir, f"reconstruction_{epoch_label}_labeled.png")
+    canvas.save(img_path)
+    print(f"Saved labeled sample reconstruction grid to {img_path}")
+
 def train_model():
-    """
-    Main function to orchestrate the VQ-VAE training process.
-    """
+    """Main function to orchestrate the VQ-VAE training process."""
     device = cfg.DEVICE
     print(f"Using device: {device}")
     os.makedirs(cfg.CHECKPOINT_DIR, exist_ok=True)
@@ -70,69 +88,45 @@ def train_model():
         print(f"ERROR: Could not load data. {e}")
         return
 
-    # --- REMOVED LPIPS INITIALIZATION ---
-    
-    # --- NEW: Initialize an SSIM function specifically for the training loss ---
     ssim_loss_fn = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     ssim_val_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
-    
     best_ssim = 0.0
     fixed_val_images = next(iter(val_loader)).to(device)
-    
     history = {'train_loss': [], 'val_loss': [], 'val_ssim': []}
+    
+    # --- NEW: Flag to track if we stopped early ---
+    early_stop_triggered = False
 
-    print("Starting training with combined MSE + SSIM loss...")
+    print("Starting training with WEIGHTED combined MSE + SSIM loss...")
     for epoch in range(1, cfg.EPOCHS + 1):
-        # --- Training Phase ---
+        # (Training and Validation Phases are unchanged)
         model.train()
         train_total_loss = 0.0
-        
-        for batch_idx, data in enumerate(tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training]")):
+        for data in tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training]"):
             data = data.to(device)
             optimizer.zero_grad()
-
             vq_loss, data_recon = model(data)
-            
-            # --- LOSS CALCULATION ---
-            # 1. Pixel-wise reconstruction loss
             mse_loss = F.mse_loss(data_recon, data)
-            # 2. Structural similarity loss. Score is [0, 1], so loss is 1 - score.
             ssim_loss = 1.0 - ssim_loss_fn(data_recon, data)
-            
-            # Combine the two reconstruction losses. A weight (alpha) can be added.
-            # e.g., recon_loss = alpha * mse_loss + (1-alpha) * ssim_loss
-            # For simplicity, we'll weight them equally for now.
             alpha = cfg.ALPHA
-            recon_loss = mse_loss + (alpha* ssim_loss)
-            
-            # Final total loss to backpropagate
+            recon_loss = mse_loss + (alpha * ssim_loss)
             loss = recon_loss + vq_loss
-            
             loss.backward()
             optimizer.step()
-            
             train_total_loss += loss.item()
-        
         avg_train_loss = train_total_loss / len(train_loader)
 
-        # --- Validation Phase ---
         model.eval()
         val_recon_loss = 0.0
-        
         with torch.no_grad():
             for data in tqdm(val_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Validation]"):
                 data = data.to(device)
                 _, data_recon = model(data)
-                
-                recon_loss = F.mse_loss(data_recon, data)
-                val_recon_loss += recon_loss.item()
-                
-                # Use the separate validation metric
+                val_recon_loss += F.mse_loss(data_recon, data).item()
                 ssim_val_metric.update(data_recon, data)
-
         avg_val_loss = val_recon_loss / len(val_loader)
         epoch_ssim = ssim_val_metric.compute()
-        ssim_val_metric.reset() # Reset metric for the next epoch
+        ssim_val_metric.reset()
 
         print(
             f"Epoch: {epoch}/{cfg.EPOCHS} | "
@@ -151,33 +145,30 @@ def train_model():
             torch.save(model.state_dict(), model_path)
             print(f"✨ New best model saved with SSIM: {best_ssim:.4f} ✨")
 
-        if epoch % cfg.SAVE_IMAGE_EPOCH == 0 or epoch == cfg.EPOCHS:
-            # (Image saving logic is unchanged)
-            with torch.no_grad():
-                _, reconstructed_samples = model(fixed_val_images)
-            all_images_tensor = torch.cat([fixed_val_images[:8], reconstructed_samples[:8]])
-            grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
-            grid_pil = transforms.ToPILImage()(grid_tensor)
-            label_width = 150
-            canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
-            canvas.paste(grid_pil, (label_width, 0))
-            draw = ImageDraw.Draw(canvas)
-            try: font = ImageFont.truetype("arial.ttf", size=24)
-            except IOError: font = ImageFont.load_default()
-            row_height = grid_pil.height // 2
-            labels = ["Originals:", "Reconstructed:"]
-            y_positions = [(row_height * i) + (row_height // 2) - 12 for i in range(len(labels))]
-            for i, label in enumerate(labels):
-                draw.text((10, y_positions[i]), label, fill="black", font=font)
-            img_path = os.path.join(cfg.CHECKPOINT_DIR, f"reconstruction_epoch_{epoch}_labeled.png")
-            canvas.save(img_path)
-            print(f"Saved labeled sample reconstruction grid to {img_path}")
-        
+        # Save periodic images
+        if epoch % cfg.SAVE_IMAGE_EPOCH == 0:
+            save_reconstruction_image(model, fixed_val_images, f"epoch_{epoch:03d}", cfg.CHECKPOINT_DIR)
+
+        # Check for early stopping
         if cfg.EARLY_STOP_SSIM:
             if best_ssim >= cfg.EARLY_STOP_SSIM:
                 print(f"\n--- Early stopping triggered! ---")
                 print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
+                early_stop_triggered = True
                 break
+
+    # --- NEW LOGIC AFTER THE LOOP ---
+    # Always save a final image, labeled appropriately
+    final_epoch_label = f"epoch_{epoch:03d}"
+    if early_stop_triggered:
+        final_epoch_label += "_final_early_stop"
+    else: # This handles the case where all epochs complete
+        final_epoch_label += "_final"
+    
+    print(f"\nSaving final reconstruction image for epoch {epoch}...")
+    # Load the BEST model to ensure the final image reflects the best performance
+    model.load_state_dict(torch.load(os.path.join(cfg.CHECKPOINT_DIR, "vqvae_best_model.pth")))
+    save_reconstruction_image(model, fixed_val_images, final_epoch_label, cfg.CHECKPOINT_DIR)
 
     plot_path = os.path.join(cfg.CHECKPOINT_DIR, f"{cfg.PROJECT_NAME}_training_progress.png")
     plot_training_progress(history, save_path=plot_path)
