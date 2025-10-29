@@ -2,10 +2,11 @@
 
 """
 The core training and validation loop for the VQ-VAE model.
-- Uses a combined MSE + Perceptual (LPIPS) loss for high-quality reconstructions.
+- Uses a combined MSE + SSIM loss for a balance of pixel and structural accuracy.
 - Evaluates the model using SSIM on a validation set.
 - Saves the best model based on SSIM and periodic, labeled image samples.
 - Includes an early stopping mechanism based on a target SSIM score.
+- Plots the training history (loss and SSIM) at the end of training.
 """
 import os
 import torch
@@ -15,12 +16,37 @@ from torchmetrics import StructuralSimilarityIndexMeasure
 from tqdm import tqdm
 from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms as transforms
-# --- NEW IMPORT FOR PERCEPTUAL LOSS ---
-import lpips
+import matplotlib.pyplot as plt
+# --- LPIPS is no longer needed ---
+# import lpips 
 
 from config import cfg
 from modules import VQVAE
 from dataset import get_dataloaders
+
+def plot_training_progress(history, save_path):
+    """
+    Plots and saves the training and validation loss, and validation SSIM.
+    """
+    print(f"Plotting training progress to {save_path}...")
+    epochs = range(1, len(history['train_loss']) + 1)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    ax1.plot(epochs, history['train_loss'], 'bo-', label='Training Total Loss')
+    ax1.plot(epochs, history['val_loss'], 'ro-', label='Validation Loss (MSE)')
+    ax1.set_title('Training and Validation Loss')
+    ax1.set_ylabel('Loss')
+    ax1.legend()
+    ax1.grid(True)
+    ax2.plot(epochs, history['val_ssim'], 'go-', label='Validation SSIM')
+    ax2.set_title('Validation SSIM')
+    ax2.set_xlabel('Epochs')
+    ax2.set_ylabel('SSIM Score')
+    ax2.legend()
+    ax2.grid(True)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    print("Plotting complete.")
 
 def train_model():
     """
@@ -30,7 +56,6 @@ def train_model():
     print(f"Using device: {device}")
     os.makedirs(cfg.CHECKPOINT_DIR, exist_ok=True)
 
-    # --- 1. Initialize Model and Optimizer ---
     model = VQVAE(
         in_channels=cfg.IN_CHANNELS, hidden_channels=cfg.HIDDEN_CHANNELS,
         out_channels=cfg.IN_CHANNELS, num_res_blocks=cfg.NUM_RES_BLOCKS,
@@ -40,56 +65,53 @@ def train_model():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.LEARNING_RATE)
 
-    # --- 2. Initialize DataLoaders and Loss Functions ---
-    try:
-        train_loader, val_loader = get_dataloaders()
+    try: train_loader, val_loader = get_dataloaders()
     except (ValueError, FileNotFoundError) as e:
         print(f"ERROR: Could not load data. {e}")
         return
 
-    # --- INITIALIZE THE PERCEPTUAL LOSS (LPIPS) ---
-    # It will download the VGG model weights automatically on first run.
-    # Set verbose=False to prevent it from printing download progress every time.
-    print("Initializing LPIPS perceptual loss function...")
-    lpips_loss_fn = lpips.LPIPS(net='vgg', verbose=False).to(device)
+    # --- REMOVED LPIPS INITIALIZATION ---
     
-    # --- Initialize Metrics and Tracking Variables ---
-    ssim_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
+    # --- NEW: Initialize an SSIM function specifically for the training loss ---
+    ssim_loss_fn = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
+    
+    # This SSIM metric is for validation reporting
+    ssim_val_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     best_ssim = 0.0
     fixed_val_images = next(iter(val_loader)).to(device)
+    
+    history = {'train_loss': [], 'val_loss': [], 'val_ssim': []}
 
-    # --- 3. The Main Training Loop ---
-    print("Starting training...")
+    print("Starting training with combined MSE + SSIM loss...")
     for epoch in range(1, cfg.EPOCHS + 1):
         # --- Training Phase ---
         model.train()
         train_total_loss = 0.0
         
-        # --- CORRECTED TRAINING LOOP LOGIC ---
         for batch_idx, data in enumerate(tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training]")):
             data = data.to(device)
             optimizer.zero_grad()
 
             vq_loss, data_recon = model(data)
             
-            # Calculate the two parts of the reconstruction loss
-            mse_recon_loss = F.mse_loss(data_recon, data)
-            # The LPIPS function expects inputs in range [-1, 1], which our data already is.
-            # .mean() is critical as LPIPS returns a loss per image in the batch.
-            perceptual_loss = lpips_loss_fn(data_recon, data).mean()
+            # --- NEW LOSS CALCULATION ---
+            # 1. Pixel-wise reconstruction loss
+            mse_loss = F.mse_loss(data_recon, data)
+            # 2. Structural similarity loss. Score is [0, 1], so loss is 1 - score.
+            ssim_loss = 1.0 - ssim_loss_fn(data_recon, data)
             
-            # Combine the reconstruction losses. You can add a weight here if desired.
-            # For now, we'll give them equal importance.
-            recon_loss = mse_recon_loss + perceptual_loss
+            # Combine the two reconstruction losses. A weight (alpha) can be added.
+            # e.g., recon_loss = alpha * mse_loss + (1-alpha) * ssim_loss
+            # For simplicity, we'll weight them equally for now.
+            recon_loss = mse_loss + ssim_loss
             
             # Final total loss to backpropagate
             loss = recon_loss + vq_loss
             
-            # --- CRITICAL FIXES ARE HERE ---
             loss.backward()
             optimizer.step()
             
-            train_total_loss += loss.item() # Track the total loss
+            train_total_loss += loss.item()
         
         avg_train_loss = train_total_loss / len(train_loader)
 
@@ -102,15 +124,15 @@ def train_model():
                 data = data.to(device)
                 _, data_recon = model(data)
                 
-                # We only need MSE for the validation loss printout, but SSIM is the key metric
                 recon_loss = F.mse_loss(data_recon, data)
                 val_recon_loss += recon_loss.item()
                 
-                ssim_metric.update(data_recon, data)
+                # Use the separate validation metric
+                ssim_val_metric.update(data_recon, data)
 
         avg_val_loss = val_recon_loss / len(val_loader)
-        epoch_ssim = ssim_metric.compute()
-        ssim_metric.reset()
+        epoch_ssim = ssim_val_metric.compute()
+        ssim_val_metric.reset() # Reset metric for the next epoch
 
         print(
             f"Epoch: {epoch}/{cfg.EPOCHS} | "
@@ -118,16 +140,19 @@ def train_model():
             f"Val Recon Loss (MSE): {avg_val_loss:.4f} | "
             f"Val SSIM: {epoch_ssim:.4f}"
         )
+        
+        history['train_loss'].append(avg_train_loss)
+        history['val_loss'].append(avg_val_loss)
+        history['val_ssim'].append(epoch_ssim.item())
 
-        # --- 4. Checkpointing and Saving ---
         if epoch_ssim > best_ssim:
             best_ssim = epoch_ssim
             model_path = os.path.join(cfg.CHECKPOINT_DIR, "vqvae_best_model.pth")
             torch.save(model.state_dict(), model_path)
             print(f"✨ New best model saved with SSIM: {best_ssim:.4f} ✨")
 
-        # (Image saving logic remains the same)
         if epoch % cfg.SAVE_IMAGE_EPOCH == 0 or epoch == cfg.EPOCHS:
+            # (Image saving logic is unchanged)
             with torch.no_grad():
                 _, reconstructed_samples = model(fixed_val_images)
             all_images_tensor = torch.cat([fixed_val_images[:8], reconstructed_samples[:8]])
@@ -148,11 +173,13 @@ def train_model():
             canvas.save(img_path)
             print(f"Saved labeled sample reconstruction grid to {img_path}")
 
-        # --- 5. EARLY STOPPING CHECK ---
         if best_ssim >= cfg.EARLY_STOP_SSIM:
             print(f"\n--- Early stopping triggered! ---")
             print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
             break
+
+    plot_path = os.path.join(cfg.CHECKPOINT_DIR, f"{cfg.PROJECT_NAME}_training_progress.png")
+    plot_training_progress(history, save_path=plot_path)
 
     print("\nTraining complete!")
     print(f"Best validation SSIM achieved: {best_ssim:.4f}")
