@@ -5,15 +5,17 @@ The core training and validation loop for the VQ-VAE model.
 - Handles the training over multiple epochs.
 - Calculates reconstruction and VQ losses.
 - Evaluates the model using SSIM on a validation set.
-- Saves the best model based on SSIM and periodic image samples.
+- Saves the best model based on SSIM and periodic, LABELED image samples.
 - Includes an early stopping mechanism based on a target SSIM score.
 """
 import os
 import torch
 import torch.nn.functional as F
-from torchvision.utils import save_image
+from torchvision.utils import make_grid
 from torchmetrics import StructuralSimilarityIndexMeasure
 from tqdm import tqdm
+from PIL import Image, ImageDraw, ImageFont
+import torchvision.transforms as transforms
 
 from config import cfg
 from modules import VQVAE
@@ -24,7 +26,7 @@ def train_model():
     Main function to orchestrate the VQ-VAE training process.
     """
     device = cfg.DEVICE
-    print(f"Using device: {device}")
+    print(f"Using device: {device.get_device_name(0)}")
     os.makedirs(cfg.CHECKPOINT_DIR, exist_ok=True)
 
     # --- 1. Initialize Model, Optimizer, and DataLoaders ---
@@ -97,19 +99,45 @@ def train_model():
             torch.save(model.state_dict(), model_path)
             print(f"✨ New best model saved with SSIM: {best_ssim:.4f} ✨")
 
+        # Save a labeled sample of reconstructed images periodically (NEW LOGIC)
         if epoch % cfg.SAVE_IMAGE_EPOCH == 0 or epoch == cfg.EPOCHS:
             with torch.no_grad():
                 _, reconstructed_samples = model(fixed_val_images)
-            comparison_grid = torch.cat([fixed_val_images[:8], reconstructed_samples[:8]])
-            img_path = os.path.join(cfg.CHECKPOINT_DIR, f"reconstruction_epoch_{epoch}.png")
-            save_image(comparison_grid.cpu(), img_path, nrow=8, normalize=True)
-            print(f"Saved sample reconstruction grid to {img_path}")
+                
+            # Combine original and reconstructed images
+            all_images_tensor = torch.cat([fixed_val_images[:8], reconstructed_samples[:8]])
+            
+            # Create the grid
+            grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
+            grid_pil = transforms.ToPILImage()(grid_tensor)
+            
+            # Create canvas and add labels
+            label_width = 180
+            canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
+            canvas.paste(grid_pil, (label_width, 0))
+            draw = ImageDraw.Draw(canvas)
+            try:
+                font = ImageFont.truetype("arial.ttf", size=32)
+            except IOError:
+                font = ImageFont.load_default()
 
-        # --- 5. EARLY STOPPING CHECK (NEW CODE) ---
+            row_height = grid_pil.height // 2
+            labels = ["Originals:", "Reconstructed:"]
+            y_positions = [(row_height * i) + (row_height // 2) - 15 for i in range(len(labels))]
+
+            for i, label in enumerate(labels):
+                draw.text((10, y_positions[i]), label, fill="black", font=font)
+            
+            # Save the final labeled image
+            img_path = os.path.join(cfg.CHECKPOINT_DIR, f"reconstruction_epoch_{epoch}_labeled.png")
+            canvas.save(img_path)
+            print(f"Saved labeled sample reconstruction grid to {img_path}")
+
+        # --- 5. EARLY STOPPING CHECK ---
         if best_ssim >= cfg.EARLY_STOP_SSIM:
             print(f"\n--- Early stopping triggered! ---")
             print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
-            break # Exit the training loop
+            break
 
     print("\nTraining complete!")
     print(f"Best validation SSIM achieved: {best_ssim:.4f}")

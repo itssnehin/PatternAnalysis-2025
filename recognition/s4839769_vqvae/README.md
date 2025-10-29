@@ -10,7 +10,7 @@ This implementation uses PyTorch and the `torchmetrics` library for SSIM benchma
 
 ## 2. File Structure
 
-The project is organized into a modular structure within the `recognition/s4839769_vqvae/` directory, adhering to professional software development practices.
+The project is organized into a modular structure within the `recognition/s4839769_vqvae/` directory, adhering to the requirements for this project.
 
 ```bash
 s4839769_vqvae/
