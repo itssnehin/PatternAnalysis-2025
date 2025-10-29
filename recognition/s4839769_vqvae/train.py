@@ -51,7 +51,7 @@ def save_reconstruction_image(model, images, epoch_label, save_dir):
     all_images_tensor = torch.cat([images[:8], reconstructed_samples[:8]])
     grid_tensor = make_grid(all_images_tensor.cpu(), nrow=8, normalize=True)
     grid_pil = transforms.ToPILImage()(grid_tensor)
-    label_width = 150
+    label_width = 200
     canvas = Image.new('RGB', (grid_pil.width + label_width, grid_pil.height), 'white')
     canvas.paste(grid_pil, (label_width, 0))
     draw = ImageDraw.Draw(canvas)
@@ -167,7 +167,8 @@ def train_model():
     
     print(f"\nSaving final reconstruction image for epoch {epoch}...")
     # Load the BEST model to ensure the final image reflects the best performance
-    model.load_state_dict(torch.load(os.path.join(cfg.CHECKPOINT_DIR, "vqvae_best_model.pth")))
+    model.load_state_dict(torch.load(os.path.join(cfg.CHECKPOINT_DIR, "vqvae_best_model.pth"), weights_only=True))
+
     save_reconstruction_image(model, fixed_val_images, final_epoch_label, cfg.CHECKPOINT_DIR)
 
     plot_path = os.path.join(cfg.CHECKPOINT_DIR, f"{cfg.PROJECT_NAME}_training_progress.png")
