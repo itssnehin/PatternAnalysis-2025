@@ -172,11 +172,12 @@ def train_model():
             img_path = os.path.join(cfg.CHECKPOINT_DIR, f"reconstruction_epoch_{epoch}_labeled.png")
             canvas.save(img_path)
             print(f"Saved labeled sample reconstruction grid to {img_path}")
-
-        if best_ssim >= cfg.EARLY_STOP_SSIM:
-            print(f"\n--- Early stopping triggered! ---")
-            print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
-            break
+        
+        if cfg.EARLY_STOP_SSIM:
+            if best_ssim >= cfg.EARLY_STOP_SSIM:
+                print(f"\n--- Early stopping triggered! ---")
+                print(f"Validation SSIM ({best_ssim:.4f}) has reached the target ({cfg.EARLY_STOP_SSIM}).")
+                break
 
     plot_path = os.path.join(cfg.CHECKPOINT_DIR, f"{cfg.PROJECT_NAME}_training_progress.png")
     plot_training_progress(history, save_path=plot_path)
