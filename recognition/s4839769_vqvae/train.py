@@ -22,31 +22,42 @@ from config import cfg
 from modules import VQVAE
 from dataset import get_dataloaders
 
+# UPDATED PLOTTING FUNCTION
 def plot_training_progress(history, save_path):
     """
-    Plots and saves the training and validation loss, and validation SSIM.
+    Plots and saves the training history, including linear and log loss, and SSIM.
     """
     print(f"Plotting training progress to {save_path}...")
     
     epochs = range(1, len(history['train_loss']) + 1)
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+    # Create a figure with THREE subplots, and make it taller
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 15), sharex=True)
     
-    # Subplot 1: Loss
+    # --- Subplot 1: Loss (Linear Scale) ---
     ax1.plot(epochs, history['train_loss'], 'bo-', label='Training Total Loss')
     ax1.plot(epochs, history['val_loss'], 'ro-', label='Validation Loss (MSE)')
-    ax1.set_title('Training and Validation Loss')
+    ax1.set_title('Training and Validation Loss (Linear Scale)')
     ax1.set_ylabel('Loss')
     ax1.legend()
     ax1.grid(True)
     
-    # Subplot 2: SSIM
-    ax2.plot(epochs, history['val_ssim'], 'go-', label='Validation SSIM')
-    ax2.set_title('Validation SSIM')
-    ax2.set_xlabel('Epochs')
-    ax2.set_ylabel('SSIM Score')
+    # --- Subplot 2: Loss (Logarithmic Scale) ---
+    ax2.plot(epochs, history['train_loss'], 'bo-', label='Training Total Loss')
+    ax2.plot(epochs, history['val_loss'], 'ro-', label='Validation Loss (MSE)')
+    ax2.set_yscale('log') # This is the key change for this subplot
+    ax2.set_title('Training and Validation Loss (Logarithmic Scale)')
+    ax2.set_ylabel('Loss (log)')
     ax2.legend()
-    ax2.grid(True)
+    ax2.grid(True, which='both') # Use 'both' for major and minor grid lines on log scale
+    
+    # --- Subplot 3: SSIM ---
+    ax3.plot(epochs, history['val_ssim'], 'go-', label='Validation SSIM')
+    ax3.set_title('Validation SSIM')
+    ax3.set_xlabel('Epochs')
+    ax3.set_ylabel('SSIM Score')
+    ax3.legend()
+    ax3.grid(True)
     
     plt.tight_layout()
     plt.savefig(save_path)
