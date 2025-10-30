@@ -24,8 +24,16 @@ from dataset import get_dataloaders
 
 # UPDATED PLOTTING FUNCTION
 def plot_training_progress(history, save_path):
-    """
-    Plots and saves the training history, including linear and log loss, and SSIM.
+    """Plots and saves the training history.
+
+    Generates a 3-part plot showing:
+    1. Training and validation loss on a linear scale.
+    2. Training and validation loss on a logarithmic scale.
+    3. Validation SSIM over epochs.
+
+    Args:
+        history (dict): A dictionary containing lists of metrics ('train_loss', 'val_loss', 'val_ssim').
+        save_path (str): The file path where the plot will be saved.
     """
     print(f"Plotting training progress to {save_path}...")
     
@@ -65,7 +73,14 @@ def plot_training_progress(history, save_path):
     print("Plotting complete.")
 
 def save_reconstruction_image(model, images, epoch_label, save_dir):
-    """A helper function to generate and save a labeled reconstruction image."""
+    """Generates and saves a labeled grid of reconstructed images during training.
+
+    Args:
+        model (nn.Module): The VQ-VAE model.
+        images (torch.Tensor): A fixed batch of images for consistent visualization.
+        epoch_label (str): A label for the current epoch (e.g., 'epoch_010').
+        save_dir (str): The directory where the image will be saved.
+    """
     with torch.no_grad():
         _, reconstructed_samples = model(images)
     all_images_tensor = torch.cat([images[:8], reconstructed_samples[:8]])
@@ -88,9 +103,20 @@ def save_reconstruction_image(model, images, epoch_label, save_dir):
     print(f"Saved labeled sample reconstruction grid to {img_path}")
 
 def train_model(train_loader, val_loader):
-    """
-    Main function to orchestrate the VQ-VAE training process.
-    This version uses a simple MSE loss and a fixed learning rate to establish a stable baseline.
+    """Orchestrates the main VQ-VAE training and validation loop.
+
+    This function handles the entire training process, including:
+    - The epoch loop.
+    - The training step (forward pass, loss calculation, backpropagation).
+    - The validation step (calculating loss and SSIM).
+    - Saving the best model based on SSIM.
+    - Triggering early stopping.
+    - Saving periodic visual checkpoints.
+    - Plotting the final training history.
+
+    Args:
+        train_loader (DataLoader): The data loader for the training set.
+        val_loader (DataLoader): The data loader for the validation set.
     """
     # SETUP
     # Get the device (CUDA or CPU) from the config file and print it.
@@ -121,7 +147,8 @@ def train_model(train_loader, val_loader):
     # Variable to keep track of the best SSIM score seen so far.
     best_ssim = 0.0
     # Get a fixed batch of validation images to generate consistent visual samples throughout training.
-    fixed_val_images = next(iter(val_loader)).to(device)
+    fixed_val_images, _, _ = next(iter(val_loader)).to(device)
+    fixed_val_images = fixed_val_images.to(device)
     # A dictionary to store the loss and SSIM from each epoch for final plotting.
     history = {'train_loss': [], 'val_loss': [], 'val_ssim': []}
     # A flag to check if the training loop was exited due to early stopping.
@@ -147,7 +174,7 @@ def train_model(train_loader, val_loader):
         train_total_loss = 0.0
         
         # Loop through each batch of data in the training loader.
-        for data in tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training, LR={current_lr:.6f}]"):
+        for data, _, _ in tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training, LR={current_lr:.6f}]"):
             # Move the batch of images to the selected device.
             data = data.to(device)
             # Reset the gradients of all model parameters before calculating new ones.
@@ -185,7 +212,7 @@ def train_model(train_loader, val_loader):
         # Disable gradient calculation to speed up validation and save memory.
         with torch.no_grad():
             # Loop through each batch in the validation loader.
-            for data in tqdm(val_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Validation]"):
+            for data, _, _ in tqdm(val_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Validation]"):
                 data = data.to(device)
                 # Perform a forward pass to get the reconstructed images.
                 _, data_recon = model(data)

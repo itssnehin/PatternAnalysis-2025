@@ -17,10 +17,19 @@ from modules import VQVAE, PixelCNN # Import both models
 from dataset import get_dataloaders
 
 def train_pixelcnn():
+    """Orchestrates the main training loop for the PixelCNN prior.
+
+    This function performs the second stage of training:
+    1.  Loads and freezes the best pre-trained VQ-VAE model.
+    2.  Initializes the PixelCNN model, optimizer, and LR scheduler.
+    3.  Loops through epochs, using the VQ-VAE to generate latent code targets.
+    4.  Trains the PixelCNN on these targets using a Cross-Entropy loss.
+    5.  Saves the best-performing PixelCNN model based on its training loss.
+    """
     device = cfg.DEVICE
     print(f"Using device: {device}")
 
-    # --- 1. Load the PRE-TRAINED VQ-VAE ---
+    # Load the PRE-TRAINED VQ-VAE 
     vqvae_model_path = os.path.join(cfg.CHECKPOINT_DIR, "vqvae_best_model.pth")
     if not os.path.exists(vqvae_model_path):
         print(f"ERROR: VQ-VAE model not found at {vqvae_model_path}. Please run 'main.py train' first.")
@@ -57,7 +66,7 @@ def train_pixelcnn():
         pixelcnn_model.train()
         total_loss = 0
         
-        for data in tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}"):
+        for data, _, _ in tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}"):
             data = data.to(device)
             optimizer.zero_grad()
             

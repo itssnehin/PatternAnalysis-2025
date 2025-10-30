@@ -23,12 +23,18 @@ import os
 
 from train import train_model
 from predict import predict
-from train_pixelcnn import train_pixelcnn # NEW IMPORT
+from train_pixelcnn import train_pixelcnn
 from config import cfg
 from dataset import get_dataloaders
 
 
 def main():
+    """The main entry point for the project.
+
+    Parses command-line arguments to determine the execution mode ('train', 'train_pixelcnn',
+    or 'predict') and the environment ('--local' flag). It then calls the appropriate
+    function to start the selected workflow.
+    """
     parser = argparse.ArgumentParser(
         description="VQ-VAE on HipMRI Dataset",
         formatter_class=argparse.RawTextHelpFormatter
@@ -50,7 +56,7 @@ def main():
     print(f"Starting Project: {cfg.PROJECT_NAME}")
     print(f"Selected Mode: {args.mode.upper()}")
 
-    # --- UPDATE CONFIG BASED ON --local FLAG (NEW LOGIC) ---
+    # --local FLAG
     if args.local:
         print("--- Running in LOCAL mode ---")
         cfg.DATASET_ROOT = cfg.LOCAL_DATASET_ROOT

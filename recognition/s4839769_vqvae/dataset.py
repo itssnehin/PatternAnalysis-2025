@@ -10,74 +10,88 @@ import torch
 import nibabel as nib
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
-
-# Import the configuration object
+from pathlib import Path
 from config import cfg
-
+import matplotlib.pyplot as plt
 class HipMRIDataset(Dataset):
-    """
-    Custom PyTorch Dataset for loading HipMRI 2D slices.
-    """
     def __init__(self, root_dir, transform=None, split='train'):
-        """
+        """Initializes the dataset object.
+
         Args:
-            root_dir (str): Path to the 'keras_slices_data' directory.
-            transform (callable, optional): Optional transform to be applied on a sample.
-            split (str): One of 'train', 'validate', or 'test'.
+            root_dir (str): Path to the root directory containing the dataset splits
+                            (e.g., 'keras_slices_data/').
+            transform (callable, optional): A function/transform to apply to each image tensor.
+                                            Defaults to None.
+            split (str, optional): The dataset split to load. Must be one of 'train',
+                                   'validate', or 'test'. Defaults to 'train'.
         """
-        # --- MODIFIED LOGIC TO HANDLE ALL SPLITS ---
-        if split == 'train':
-            self.image_dir = os.path.join(root_dir, 'keras_slices_train')
-        elif split == 'validate':
-            self.image_dir = os.path.join(root_dir, 'keras_slices_validate')
-        elif split == 'test':
-            self.image_dir = os.path.join(root_dir, 'keras_slices_test')
-        else:
-            raise ValueError(f"Invalid split '{split}'. Choose from 'train', 'validate', 'test'.")
-            
+        self.image_dir = os.path.join(root_dir, f'keras_slices_{split}')
         self.transform = transform
         
         if not os.path.isdir(self.image_dir):
             raise ValueError(f"Data directory not found at: {self.image_dir}")
             
-        self.image_files = glob.glob(os.path.join(self.image_dir, '*.nii.gz'))
+        self.image_files = [Path(p) for p in glob.glob(os.path.join(self.image_dir, '*.nii.gz'))]
         
         if not self.image_files:
             raise ValueError(f"No '.nii.gz' files found in {self.image_dir}")
 
         print(f"Found {len(self.image_files)} images in '{split}' set.")
 
-
     def __len__(self):
+        """Returns the total number of samples in the dataset."""
         return len(self.image_files)
 
     def __getitem__(self, idx):
+        """Fetches the sample at the given index.
+
+        Args:
+            idx (int): The index of the sample to retrieve.
+
+        Returns:
+            tuple: A tuple containing:
+                - torch.Tensor: The preprocessed image tensor.
+                - str: The filename of the image.
+                - str: The extracted subject ID label.
+        """
         img_path = self.image_files[idx]
         
         try:
-            # Load the Nifti image and get its data array
             nifti_img = nib.load(img_path)
             image = nifti_img.get_fdata().astype('float32')
         except Exception as e:
+            # Provide dummy values for all three return items on error
             print(f"Error loading file: {img_path}. Skipping. Error: {e}")
-            # Return a dummy tensor if loading fails
-            return torch.zeros((cfg.IN_CHANNELS, cfg.IMAGE_SIZE, cfg.IMAGE_SIZE))
+            return torch.zeros((cfg.IN_CHANNELS, cfg.IMAGE_SIZE, cfg.IMAGE_SIZE)), "error.nii.gz", "error"
 
-        # Convert numpy array to PyTorch tensor and add a channel dimension
-        # Shape becomes [1, H, W]
         image_tensor = torch.from_numpy(image).unsqueeze(0)
 
-        # Apply transformations if they exist
         if self.transform:
             image_tensor = self.transform(image_tensor)
 
-        return image_tensor
+        # --- NEW: Extract the subject ID as the "class label" ---
+        # Assumes filename format like 'OAS1_0001_MR1_55.nii.gz'
+        try:
+            subject_label = "_".join(img_path.name.split('_')[:2])
+        except IndexError:
+            subject_label = "unknown"
+
+        # --- KEY CHANGE: Return image, full filename, AND the subject label ---
+        return image_tensor, img_path.name, subject_label
 
 def get_dataloaders():
+    """Creates and returns the data loaders for all dataset splits.
+
+    This function initializes the train, validation, and test datasets and wraps them
+    in PyTorch DataLoader objects with configurations specified in `config.py`.
+
+    Returns:
+        tuple: A tuple containing:
+            - DataLoader: The data loader for the training set.
+            - DataLoader: The data loader for the validation set.
+            - DataLoader: The data loader for the test set.
     """
-    Creates and returns the training, validation, AND testing DataLoaders.
-    """
+
     transform = transforms.Compose([
         transforms.Resize((cfg.IMAGE_SIZE, cfg.IMAGE_SIZE), antialias=True),
         transforms.Lambda(lambda x: (x / x.max()) * 2.0 - 1.0),
@@ -106,8 +120,8 @@ def get_dataloaders():
     return train_loader, val_loader, test_loader
 
 
-# --- Sanity Check ---
-# You can run this file directly on Rangpur to test the data loading
+# Sanity Check 
+# can run this file directly on Rangpur to test the data loading
 if __name__ == '__main__':
     print("Running dataset sanity check...")
     try:

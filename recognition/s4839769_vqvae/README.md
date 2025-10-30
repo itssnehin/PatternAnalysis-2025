@@ -1,24 +1,67 @@
 # VQ-VAE and PixelCNN for HipMRI Prostate Cancer Image Generation
-**Author:** [Your Name] ([Your Student ID])
+**Author: Snehin Raj Singh Kukreja (48397690)**
+
+
+
+
 
 ## 1. Overview
 
-### The Problem
-This project aims to solve the challenge of generating realistic medical imagery by creating a generative model for the HipMRI Study on Prostate Cancer dataset. The primary goal is to implement a two-stage model, combining a Vector-Quantized Variational Autoencoder (VQ-VAE) with a PixelCNN prior, to generate clear 2D MRI slices. The key success metric is to achieve a **Structured Similarity Index (SSIM) of over 0.65** on a held-out test set.
+### Purpose & Problem
+This project tackles generative modelling of 2D prostate MRI slices from the HipMRI Study on Prostate Cancer dataset [1].  
+The aim is to produce realistic, structurally faithful MRI images that can support research, radiotherapy planning, and data augmentation. Following the COMP3710 “**Hard**” project brief, the model must generate “reasonably clear images” with a Structural Similarity Index Measure (SSIM) ≥ 0.60.
+
+Generative modelling in medical imaging is challenging area due to the need for both anatomical accuracy and training stability of deep learning models. This project explores how modern discrete latent models can achieve this balance by learning interpretable representations of visual structures.
 
 ### How it Works
 The model is a two-stage pipeline designed to first learn a "vocabulary" of visual features and then learn the "grammar" of how to arrange them.
 
-#### Stage 1: Learning a Visual Vocabulary (VQ-VAE)
-The first stage uses a **VQ-VAE**, a type of autoencoder that excels at producing sharp images by learning a discrete latent space. It has three main parts:
-1.  **Encoder:** A deep convolutional neural network (CNN) that compresses an input MRI slice into a lower-dimensional latent map of feature vectors.
-2.  **Vector Quantizer (Codebook):** This is the core of the VQ-VAE. It maintains a finite, learnable "codebook" (e.g., 512 vectors). For each vector from the encoder, it finds the single closest vector in the codebook and replaces it. This "quantization" step creates a discrete map of codebook indices.
-3.  **Decoder:** A transposed CNN that takes the discrete latent map and reconstructs the image.
-
-The VQ-VAE is trained to make the reconstructed image as close as possible to the original. After training, the codebook contains a rich vocabulary of all the essential visual patterns (textures, edges, shapes) found in the MRI scans.
-
+#### Stage 1: VQ-VAE
 ![VQ-VAE Architecture Diagram](./diagrams/vqvae_diagram.jpg)
-*(Diagram sourced from Analytics Vidhya [1])*
+*(Diagram sourced from Analytics Vidhya [2])*
+
+The first stage learns a discrete latent representation of the HipMRI slices.  
+It consists of an encoder, vector quantizer, and decoder. The encoder compresses each image, the quantizer replaces latent vectors with the nearest entries from a learnable codebook, and the decoder reconstructs the input.
+
+Training minimises the sum of:
+- **Reconstruction loss** using Mean Squared Error (MSE) between original and reconstructed images.
+- **Vector-quantisation loss** that aligns encoder outputs with the codebook.
+- **Commitment loss** weighted by the `commitment_cost` parameter (0.25) to encourage consistent usage of the codes in the codeblock.
+
+### Hyperparameters and justification
+
+#### Data and normalization
+- `IMAGE_SIZE = 128` : downsizes variable slice sizes to a square for simpler batching and faster training; keeps enough structure for pelvic anatomy.
+- `IN_CHANNELS = 1` : MRI slices are single-channel.
+- `Normalization to [-1, 1]` : matches decoder tanh-style output scaling and sets SSIM `data_range=2.0`.
+
+#### Optimizer and schedule
+- I used Adam because it combines the benefits of momentum (from SGD with momentum) and adaptive learning rates (from RMSProp).  
+For VQ-VAE training, the encoder–decoder and quantizer updates have gradients with very different magnitudes. Adam’s per-parameter learning rate adjustment keeps updates balanced without manual tuning.  
+ 
+- `LEARNING_RATE = 1e-4` was a common stable default for Adam with reconstruction losses; higher values caused the model to collapse, lower values slowed convergence.
+- `WARMUP_EPOCHS = 3` : This gradual ramp-up reduces early quantizer instability in VQ-VAE.
+
+#### Batching and runtime
+- `BATCH_SIZE = 64` This balances gradient estimate quality with GPU memory at 128×128. Since I trained the model locally too on a RTX4060 Laptop with 8GB of VRAM.
+- `NUM_WORKERS = 8 (cluster) / 0 (local)` : parallel I/O on HPC; avoids Windows multiprocessing issues locally.
+- `EPOCHS = 70` : There was a plateau in validation SSIM observed before 70 as shown in the loss curves later on. Further epochs gave diminishing returns.
+
+#### VQ-VAE architecture
+- `HIDDEN_CHANNELS = 128` — capacity appropriate for 128×128 inputs without exhausting memory.
+- `NUM_RES_BLOCKS = 2, RES_CHANNELS = 64` — residual depth adds nonlinearity while keeping runtime manageable.
+- Reconstruction loss = MSE provided stable feedback to the model for reconstruction; aligns with SSIM improvements as shown in the loss curves.
+
+#### Vector quantizer
+- `NUM_EMBEDDINGS = 512` had sufficient codebook diversity without codebook collapse.
+- `EMBEDDING_DIM = 128` matched encoder channel width, reducing projection overhead and preserving detail.
+- `COMMITMENT_COST = 0.25` — standard setting from VQ-VAE to balance codebook usage and encoder drift.
+
+#### Model selection and metrics
+- `Validation metric = SSIM` (data_range = 2.0) — measures structure preservation; data_range matches [-1, 1] scaling.
+- `EARLY_STOP_SSIM = None` to allow for the training of the model to saturate and hit a maximum validation SSIM score.
+
+
 
 #### Stage 2: Learning the Spatial Structure (PixelCNN)
 While the VQ-VAE learns *what* to draw, it doesn't learn *how* to arrange the features coherently. This is the job of the **PixelCNN**, which acts as a powerful **prior** over the discrete latent space.
@@ -26,17 +69,27 @@ While the VQ-VAE learns *what* to draw, it doesn't learn *how* to arrange the fe
 2.  **Autoregression:** The PixelCNN learns to predict the next code index in a grid based on all the previous indices "above and to the left" of it. It learns the statistical patterns and spatial relationships of the visual vocabulary.
 
 <p align="center">
-<img src="./diagrams/pixelcnn.png" alt="PixelCNN Autoregressive Process" style="width:25%; height:auto;">
+<img src="./diagrams/pixelcnn.png" alt="PixelCNN Autoregressive Process" style="width:16%; height:auto;">
 </p>
 
 During the final generation step, the trained PixelCNN creates a completely new, structured latent map from scratch, one "pixel" (code index) at a time. This synthetic map is then passed to the VQ-VAE's decoder to produce a novel, high-quality image that respects the learned spatial patterns of the original dataset.
+
+### PixelCNN prior and justification
+
+- Target = code indices from VQ-VAE encoder which trains a prior over the discrete latent grid.
+- Loss = cross-entropy since it's a classification task over `NUM_EMBEDDINGS = 512` categories per latent position.
+- `Hidden_dim` = 256, `num_layers = 7` best results for a PixelCNN width/depth for 32×32 latent maps (128/4).
+- `Optimizer = Adam`, Learning Rate `LR = 1e-4` Adam combines the benefits of momentum (from SGD with momentum) and adaptive learning rates (from RMSProp). Adam’s per-parameter learning rate adjustment keeps updates balanced without manual tuning. Higher learning rates caused the model to collapse during training.
+- `Scheduler = cosine annealing` for a smooth decay of the learning rate which helps prevent collapse during training.
+- `Epochs = 50`: The likelihood plateaus before 50; longer runs add little visual improvement.
+
 
 ---
 
 ## 2. Data and Preprocessing
 
 ### Dataset
-The model is trained on the **HipMRI Study on Prostate Cancer** dataset, which consists of pre-processed 2D slices stored as NIfTI files (`.nii.gz`). The dataset is divided into training, validation, and testing sets.
+The model is trained on the HipMRI Study on Prostate Cancer dataset [1], which consists of pre-processed 2D slices stored as NIfTI files (`.nii.gz`). The dataset is divided into training, validation, and testing sets.
 
 ### Pre-processing
 The following pre-processing steps are applied in `dataset.py`:
@@ -150,4 +203,7 @@ These are completely new images generated from scratch. The trained PixelCNN cre
 
 ---
 ## 7. References
-[1] Koo, J. (2021). *An Overview on VQ-VAE : Learning Discrete Representation Space*. Analytics Vidhya. [https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337](https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337)
+
+[1] Australian e-Health Research Centre, CSIRO. *HipMRI Study on Prostate Cancer (open dataset)*. DOI: [10.25919/45t8-p065](https://doi.org/10.25919/45t8-p065)
+
+[2] Koo, J. (2021). *An Overview on VQ-VAE : Learning Discrete Representation Space*. Analytics Vidhya. [https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337](https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337)
