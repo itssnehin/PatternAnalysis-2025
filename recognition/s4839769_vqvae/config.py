@@ -25,7 +25,7 @@ class Config:
     IN_CHANNELS = 1  # MRI scans are grayscale
 
     # --- Training Settings ---
-    EPOCHS = 100
+    EPOCHS = 50
     BATCH_SIZE = 64
     LEARNING_RATE = 1e-4
     NUM_WORKERS = 8 # For the DataLoader on Rangpur. May need to be 1 for local Windows.
