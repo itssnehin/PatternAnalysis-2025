@@ -87,19 +87,19 @@ def save_reconstruction_image(model, images, epoch_label, save_dir):
     canvas.save(img_path)
     print(f"Saved labeled sample reconstruction grid to {img_path}")
 
-def train_model():
+def train_model(train_loader, val_loader):
     """
     Main function to orchestrate the VQ-VAE training process.
     This version uses a simple MSE loss and a fixed learning rate to establish a stable baseline.
     """
-    # --- 1. SETUP ---
+    # SETUP
     # Get the device (CUDA or CPU) from the config file and print it.
     device = cfg.DEVICE
     print(f"Using device: {device}")
     # Create the directory for saving model checkpoints if it doesn't already exist.
     os.makedirs(cfg.CHECKPOINT_DIR, exist_ok=True)
 
-    # --- 2. INITIALIZE MODEL AND OPTIMIZER ---
+    # INITIALIZE MODEL AND OPTIMIZER
     # Create an instance of the VQVAE model from modules.py, using hyperparameters from the config.
     model = VQVAE(
         in_channels=cfg.IN_CHANNELS, hidden_channels=cfg.HIDDEN_CHANNELS,
@@ -114,16 +114,8 @@ def train_model():
     
     # The learning rate scheduler has been removed in this version for simplicity.
 
-    # --- 3. LOAD DATA ---
-    # Get the training and validation data loaders from dataset.py.
-    try:
-        train_loader, val_loader = get_dataloaders()
-    except (ValueError, FileNotFoundError) as e:
-        # If data loading fails, print an error and exit gracefully.
-        print(f"ERROR: Could not load data. {e}")
-        return
 
-    # --- 4. INITIALIZE METRICS AND TRACKING VARIABLES ---
+    # INITIALIZE METRICS AND TRACKING VARIABLES 
     # Initialize the SSIM metric calculator for the validation phase.
     ssim_val_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     # Variable to keep track of the best SSIM score seen so far.
@@ -136,18 +128,26 @@ def train_model():
     early_stop_triggered = False
 
     print("Starting VANILLA training with pure MSE loss...")
-    # --- 5. MAIN TRAINING LOOP ---
+    # MAIN TRAINING LOOP
     # Loop through the total number of epochs specified in the config.
     for epoch in range(1, cfg.EPOCHS + 1):
         
-        # --- 5.1. TRAINING PHASE ---
+        #  LEARNING RATE WARM-UP ---
+        if epoch <= cfg.WARMUP_EPOCHS:
+            # Linearly increase the LR from a small value to the target LR
+            new_lr = cfg.LEARNING_RATE * (epoch / cfg.WARMUP_EPOCHS)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = new_lr
+        
+        current_lr = optimizer.param_groups[0]['lr']
+        # TRAINING PHASE
         # Set the model to training mode. This enables layers like BatchNorm (if they existed).
         model.train()
         # Variable to accumulate the total loss over the training epoch.
         train_total_loss = 0.0
         
         # Loop through each batch of data in the training loader.
-        for data in tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training]"):
+        for data in tqdm(train_loader, desc=f"Epoch {epoch}/{cfg.EPOCHS} [Training, LR={current_lr:.6f}]"):
             # Move the batch of images to the selected device.
             data = data.to(device)
             # Reset the gradients of all model parameters before calculating new ones.
@@ -164,7 +164,9 @@ def train_model():
             
             # Perform backpropagation: calculate the gradients of the loss with respect to model parameters.
             loss.backward()
-            
+            # Clip the gradients to a maximum norm of 1.0. This is the safety valve.
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
             # Update the model's weights using the calculated gradients.
             optimizer.step()
             
@@ -174,7 +176,7 @@ def train_model():
         # Calculate the average training loss for the entire epoch.
         avg_train_loss = train_total_loss / len(train_loader)
 
-        # --- 5.2. VALIDATION PHASE ---
+        # VALIDATION PHASE
         # Set the model to evaluation mode. This disables layers like Dropout (if they existed).
         model.eval()
         # Variable to accumulate the validation loss.
@@ -201,7 +203,7 @@ def train_model():
         
         # The learning rate scheduler step has been removed in this version.
 
-        # --- 5.3. LOGGING AND SAVING ---
+        # LOGGING AND SAVING
         # Print a summary of the epoch's performance.
         print(
             f"Epoch: {epoch}/{cfg.EPOCHS} | "
@@ -228,7 +230,6 @@ def train_model():
             save_reconstruction_image(model, fixed_val_images, f"epoch_{epoch:03d}", cfg.CHECKPOINT_DIR)
 
         # Check if the best SSIM has reached the early stopping target.
-        
         if cfg.EARLY_STOP_SSIM:
             if best_ssim >= cfg.EARLY_STOP_SSIM:
                 print(f"\n--- Early stopping triggered! ---")
@@ -236,7 +237,7 @@ def train_model():
                 early_stop_triggered = True
                 break # Exit the main training loop.
 
-    # --- 6. FINAL ACTIONS AFTER TRAINING ---
+    # FINAL ACTIONS AFTER TRAINING
     # Determine a label for the final image based on whether training finished or stopped early.
     final_epoch_label = f"epoch_{epoch:03d}"
     if early_stop_triggered:

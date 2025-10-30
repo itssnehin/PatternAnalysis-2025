@@ -40,11 +40,13 @@ def predict():
 
     # --- 2. Get Data for Reconstruction ---
     try:
-        _, val_loader = get_dataloaders()
-        original_images = next(iter(val_loader))[:8].to(device) # We'll use 8 images
+        # get_dataloaders now returns three items. We only need the third one (test_loader).
+        _, _, test_loader = get_dataloaders()
+        original_images = next(iter(test_loader))[:8].to(device) # We'll use 8 images
     except (ValueError, FileNotFoundError) as e:
-        print(f"ERROR: Could not load validation data. {e}")
+        print(f"ERROR: Could not load test data. {e}")
         return
+
         
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
         

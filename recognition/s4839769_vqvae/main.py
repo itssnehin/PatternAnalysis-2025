@@ -70,10 +70,17 @@ def main():
 
     # --- Mode Execution ---
     if args.mode == 'train':
+        if args.mode == 'train':
         try:
-            train_model()
-            print("\nVQ-VAE training finished. Now you can train the PixelCNN prior by running:")
-            print("python main.py train_pixelcnn --local")
+            # --- UPDATE THIS LINE ---
+            # Unpack all three loaders, even though train_model only needs two.
+            train_loader, val_loader, _ = get_dataloaders()
+            
+            # Pass only the required loaders to the training function
+            train_model(train_loader, val_loader)
+            
+            print("\nTraining finished. Generating final predictions from the best model...")
+            predict()
         except Exception as e: print(f"\nAn error occurred during VQ-VAE training: {e}")
             
     # --- NEW MODE ---

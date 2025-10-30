@@ -19,31 +19,35 @@ class HipMRIDataset(Dataset):
     """
     Custom PyTorch Dataset for loading HipMRI 2D slices.
     """
-    def __init__(self, root_dir, transform=None, train=True):
+    def __init__(self, root_dir, transform=None, split='train'):
         """
         Args:
             root_dir (str): Path to the 'keras_slices_data' directory.
             transform (callable, optional): Optional transform to be applied on a sample.
-            train (bool): If True, loads training data, otherwise loads validation data.
+            split (str): One of 'train', 'validate', or 'test'.
         """
-        if train:
+        # --- MODIFIED LOGIC TO HANDLE ALL SPLITS ---
+        if split == 'train':
             self.image_dir = os.path.join(root_dir, 'keras_slices_train')
-        else:
-            # Using the validation set for evaluating reconstructions
+        elif split == 'validate':
             self.image_dir = os.path.join(root_dir, 'keras_slices_validate')
+        elif split == 'test':
+            self.image_dir = os.path.join(root_dir, 'keras_slices_test')
+        else:
+            raise ValueError(f"Invalid split '{split}'. Choose from 'train', 'validate', 'test'.")
             
         self.transform = transform
         
         if not os.path.isdir(self.image_dir):
             raise ValueError(f"Data directory not found at: {self.image_dir}")
             
-        # Find all Nifti files in the directory
         self.image_files = glob.glob(os.path.join(self.image_dir, '*.nii.gz'))
         
         if not self.image_files:
             raise ValueError(f"No '.nii.gz' files found in {self.image_dir}")
 
-        print(f"Found {len(self.image_files)} images in {'training' if train else 'validation'} set.")
+        print(f"Found {len(self.image_files)} images in '{split}' set.")
+
 
     def __len__(self):
         return len(self.image_files)
@@ -72,38 +76,35 @@ class HipMRIDataset(Dataset):
 
 def get_dataloaders():
     """
-    Creates and returns the training and validation DataLoaders.
+    Creates and returns the training, validation, AND testing DataLoaders.
     """
-    # Define the transformation pipeline
     transform = transforms.Compose([
-        # Resize the image to the size specified in the config
         transforms.Resize((cfg.IMAGE_SIZE, cfg.IMAGE_SIZE), antialias=True),
-        # Normalize pixel values to the range [-1, 1]
         transforms.Lambda(lambda x: (x / x.max()) * 2.0 - 1.0),
     ])
 
-    # Create training dataset and dataloader
-    train_dataset = HipMRIDataset(root_dir=cfg.DATASET_ROOT, transform=transform, train=True)
+    # --- CREATE ALL THREE DATASETS ---
+    train_dataset = HipMRIDataset(root_dir=cfg.DATASET_ROOT, transform=transform, split='train')
+    val_dataset = HipMRIDataset(root_dir=cfg.DATASET_ROOT, transform=transform, split='validate')
+    test_dataset = HipMRIDataset(root_dir=cfg.DATASET_ROOT, transform=transform, split='test')
+    
+    # --- CREATE ALL THREE DATALOADERS ---
     train_loader = DataLoader(
-        train_dataset,
-        batch_size=cfg.BATCH_SIZE,
-        shuffle=True,
-        num_workers=cfg.NUM_WORKERS,
-        pin_memory=True,
-        drop_last=True  # Important for consistent batch sizes
+        train_dataset, batch_size=cfg.BATCH_SIZE, shuffle=True,
+        num_workers=cfg.NUM_WORKERS, pin_memory=True, drop_last=True
     )
-
-    # Create validation dataset and dataloader
-    val_dataset = HipMRIDataset(root_dir=cfg.DATASET_ROOT, transform=transform, train=False)
     val_loader = DataLoader(
-        val_dataset,
-        batch_size=cfg.BATCH_SIZE,
-        shuffle=False, # No need to shuffle validation data
-        num_workers=cfg.NUM_WORKERS,
-        pin_memory=True
+        val_dataset, batch_size=cfg.BATCH_SIZE, shuffle=False,
+        num_workers=cfg.NUM_WORKERS, pin_memory=True
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=cfg.BATCH_SIZE, shuffle=False, # Shuffle is False for testing
+        num_workers=cfg.NUM_WORKERS, pin_memory=True
     )
     
-    return train_loader, val_loader
+    # Return all three loaders
+    return train_loader, val_loader, test_loader
+
 
 # --- Sanity Check ---
 # You can run this file directly on Rangpur to test the data loading
