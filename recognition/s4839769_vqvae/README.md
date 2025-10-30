@@ -17,7 +17,7 @@ The first stage uses a **VQ-VAE**, a type of autoencoder that excels at producin
 
 The VQ-VAE is trained to make the reconstructed image as close as possible to the original. After training, the codebook contains a rich vocabulary of all the essential visual patterns (textures, edges, shapes) found in the MRI scans.
 
-![VQ-VAE Architecture Diagram](PatternAnalysis-2025/recognition/s4839769_vqvae/diagrams/vqvae_diagram.png)
+![VQ-VAE Architecture Diagram](./diagrams/vqvae_diagram.png)
 *(Diagram sourced from Analytics Vidhya [1])*
 
 #### Stage 2: Learning the Spatial Structure (PixelCNN)
@@ -25,7 +25,7 @@ While the VQ-VAE learns *what* to draw, it doesn't learn *how* to arrange the fe
 1.  **Training:** After the VQ-VAE is trained and frozen, its encoder is used to convert the entire training dataset into a set of discrete latent maps (grids of codebook indices). The PixelCNN is then trained on these maps.
 2.  **Autoregression:** The PixelCNN learns to predict the next code index in a grid based on all the previous indices "above and to the left" of it. It learns the statistical patterns and spatial relationships of the visual vocabulary.
 
-![PixelCNN Autoregressive Process](PatternAnalysis-2025/recognition/s4839769_vqvae/diagrams/pixelcnn.png)
+![PixelCNN Autoregressive Process](./diagrams/pixelcnn.png)
 
 During the final generation step, the trained PixelCNN creates a completely new, structured latent map from scratch, one "pixel" (code index) at a time. This synthetic map is then passed to the VQ-VAE's decoder to produce a novel, high-quality image that respects the learned spatial patterns of the original dataset.
 
