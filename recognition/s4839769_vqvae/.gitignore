@@ -1,3 +1,7 @@
 /__pycache__/
 /HipMRI_Study_open/
 /checkpoints/
+
+
+
+!/checkpoints/snehin_HipMRI_VQVAE/snehin_HipMRI_VQVAE_training_progress.png

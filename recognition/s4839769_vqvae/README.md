@@ -1,32 +1,40 @@
-# VQ-VAE for HipMRI Prostate Cancer Image Generation
+# VQ-VAE and PixelCNN for HipMRI Prostate Cancer Image Generation
 **Author:** [Your Name] ([Your Student ID])
 
 ## 1. Overview
 
 ### The Problem
-This project aims to solve the challenge of generating realistic medical imagery by creating a generative model for the HipMRI Study on Prostate Cancer dataset. The primary goal is to implement a Vector-Quantized Variational Autoencoder (VQ-VAE) capable of generating clear 2D MRI slices. The key success metric, as specified in the project brief, is to achieve a **Structured Similarity Index (SSIM) of over 0.65** on a held-out test set, with an early stopping mechanism implemented to halt training once this target is met.
+This project aims to solve the challenge of generating realistic medical imagery by creating a generative model for the HipMRI Study on Prostate Cancer dataset. The primary goal is to implement a two-stage model, combining a Vector-Quantized Variational Autoencoder (VQ-VAE) with a PixelCNN prior, to generate clear 2D MRI slices. The key success metric is to achieve a **Structured Similarity Index (SSIM) of over 0.65** on a held-out test set.
 
 ### How it Works
-The VQ-VAE is a type of generative autoencoder that excels at producing sharp images by using a discrete, rather than continuous, latent space. This is achieved through three main components:
+The model is a two-stage pipeline designed to first learn a "vocabulary" of visual features and then learn the "grammar" of how to arrange them.
 
-1.  **Encoder:** A deep convolutional neural network (CNN) that includes Residual Blocks. It takes an input MRI slice and compresses it into a lower-dimensional continuous latent representation, capturing the image's essential features.
-2.  **Vector Quantizer (Codebook):** This is the core of the VQ-VAE. It maintains a finite, learnable "codebook" of embedding vectors. For each vector in the encoder's output, it finds the closest vector in the codebook and replaces it. This "quantization" step creates a discrete latent map.
-3.  **Decoder:** A transposed CNN, also containing Residual Blocks, that takes the discrete latent map from the quantizer and reconstructs the image.
+#### Stage 1: Learning a Visual Vocabulary (VQ-VAE)
+The first stage uses a **VQ-VAE**, a type of autoencoder that excels at producing sharp images by learning a discrete latent space. It has three main parts:
+1.  **Encoder:** A deep convolutional neural network (CNN) that compresses an input MRI slice into a lower-dimensional latent map of feature vectors.
+2.  **Vector Quantizer (Codebook):** This is the core of the VQ-VAE. It maintains a finite, learnable "codebook" (e.g., 512 vectors). For each vector from the encoder, it finds the single closest vector in the codebook and replaces it. This "quantization" step creates a discrete map of codebook indices.
+3.  **Decoder:** A transposed CNN that takes the discrete latent map and reconstructs the image.
 
-The model is trained by minimizing a combined loss function that includes a reconstruction loss (how well the image is rebuilt) and a VQ loss (which updates both the codebook vectors and the encoder's output). This process forces the model to learn a compressed and meaningful representation, enabling it to generate new, high-fidelity images.
+The VQ-VAE is trained to make the reconstructed image as close as possible to the original. After training, the codebook contains a rich vocabulary of all the essential visual patterns (textures, edges, shapes) found in the MRI scans.
 
-### Model Architecture Visualization
-The following diagram illustrates the data flow through the VQ-VAE architecture used in this project.
+![VQ-VAE Architecture Diagram](/diagrams/vqvae_diagram.png)
+*(Diagram sourced from Analytics Vidhya [1])*
 
-![VQ-VAE Architecture Diagram](./assets/your_diagram.png) 
-*(**Action:** You should create a simple diagram like the ones in the examples showing Input -> Encoder -> VQ -> Decoder -> Output and save it in an `assets` folder)*
+#### Stage 2: Learning the Spatial Structure (PixelCNN)
+While the VQ-VAE learns *what* to draw, it doesn't learn *how* to arrange the features coherently. This is the job of the **PixelCNN**, which acts as a powerful **prior** over the discrete latent space.
+1.  **Training:** After the VQ-VAE is trained and frozen, its encoder is used to convert the entire training dataset into a set of discrete latent maps (grids of codebook indices). The PixelCNN is then trained on these maps.
+2.  **Autoregression:** The PixelCNN learns to predict the next code index in a grid based on all the previous indices "above and to the left" of it. It learns the statistical patterns and spatial relationships of the visual vocabulary.
+
+![PixelCNN Autoregressive Process](./diagrams/pixelcnn.png)
+
+During the final generation step, the trained PixelCNN creates a completely new, structured latent map from scratch, one "pixel" (code index) at a time. This synthetic map is then passed to the VQ-VAE's decoder to produce a novel, high-quality image that respects the learned spatial patterns of the original dataset.
 
 ---
 
 ## 2. Data and Preprocessing
 
 ### Dataset
-The model is trained on the **HipMRI Study on Prostate Cancer** dataset, which consists of pre-processed 2D slices stored as NIfTI files (`.nii.gz`). The dataset is divided into training and validation sets.
+The model is trained on the **HipMRI Study on Prostate Cancer** dataset, which consists of pre-processed 2D slices stored as NIfTI files (`.nii.gz`). The dataset is divided into training, validation, and testing sets.
 
 ### Pre-processing
 The following pre-processing steps are applied in `dataset.py`:
@@ -36,23 +44,27 @@ The following pre-processing steps are applied in `dataset.py`:
 *(Reference: The normalization method is a common technique in deep learning for image data.)*
 
 ### Data Splits Justification
-The full dataset is split into a training set and a validation set using an **80/20 random split**. This is a standard and robust method for model evaluation. An 80% training split provides the model with a large amount of data to learn from, while the 20% validation split offers a sufficiently large and independent set to reliably measure the model's generalization performance (i.e., how well it performs on unseen data), which is critical for calculating the SSIM score and triggering the early stopping condition.
+The dataset is pre-split into `train`, `validate`, and `test` directories. This project respects this split. The **training set** is used exclusively to train the model parameters. The **validation set** is used during training to make key decisions, such as when to save the best model and when to reduce the learning rate. Finally, the **test set** is held out and used only once at the very end in `predict.py` to provide an unbiased, final evaluation of the model's performance on completely unseen data.
 
 ---
 
 ## 3. Project Structure
 The project is organized into a modular structure for clarity and maintainability.
+
+```
 /
-├── HipMRI_Study_open/ # Local dataset folder (if using --local)
-├── checkpoints/ # Directory for saved model weights
-├── predictions/ # Directory for final output images
-├── main.py # Main entry point to run training or prediction
-├── config.py # Centralized configuration for all hyperparameters
-├── modules.py # The VQ-VAE model architecture (Encoder, Decoder, VQ)
-├── dataset.py # Data loading and preprocessing pipeline
-├── train.py # The core training and validation loop
-├── predict.py # Script to load a model and generate results
-└── README.md # This file
+├── diagrams/               # Folder for storing diagrams like vqvae_diagram.png
+├── checkpoints/            # Directory for saved model weights
+├── predictions/            # Directory for final output images
+├── main.py                 # Main entry point for all operations
+├── config.py               # Centralized configuration for all hyperparameters
+├── modules.py              # VQ-VAE and PixelCNN model architectures
+├── dataset.py              # Data loading and preprocessing pipeline
+├── train.py                # The VQ-VAE training and validation loop
+├── train_pixelcnn.py       # The PixelCNN training loop
+├── predict.py              # Script to load models and generate final results
+└── README.md               # This file
+```
 
 ---
 
@@ -70,63 +82,70 @@ To ensure reproducibility, all required Python libraries and their versions are 
 | nibabel      | [e.g., 5.1.0] |
 | tqdm         | [e.g., 4.65.0]|
 | matplotlib   | [e.g., 3.7.1] |
+| numpy        | [e.g., 1.25.0]|
 
-*(**Action:** Run `pip freeze | findstr "torch"` etc. to get your exact versions and fill them in.)*
+*(**Action:** Run `pip freeze` to get your exact versions and fill them in.)*
 
 ### Environment Setup
 1.  Create a Conda or venv environment.
 2.  Install the required packages:
     ```bash
-    pip install torch torchvision torchmetrics Pillow nibabel tqdm matplotlib
+    pip install torch torchvision torchmetrics Pillow nibabel tqdm matplotlib numpy
     ```
 
 ---
 
 ## 5. Usage Instructions
-The project can be run from the terminal for either training a new model or predicting with an existing one.
+The project is run from the terminal in a three-step process.
 
-### To Train the Model
-The script supports training on both a local machine and a remote cluster.
+### 1. Train the VQ-VAE
+This learns the visual codebook.
+```bash
+python main.py train --local
+```
 
--   **On a local machine** (ensure the `HipMRI_Study_open` folder is in your project directory):
-    ```bash
-    python main.py train --local
-    ```
--   **On the Rangpur cluster:**
-    ```bash
-    python main.py train
-    ```
-Training will stop automatically if the validation SSIM exceeds **0.65**. The best model is saved in `checkpoints/`.
+### 2. Train the PixelCNN Prior
+This learns the structure of the latent space.
+```bash
+python main.py train_pixelcnn --local
+```
 
-### To Generate Predictions
-This will load the best trained model and generate a final comparison image.
-
--   **On a local machine:**
-    ```bash
-    python main.py predict --local
-    ```
--   **On the Rangpur cluster:**
-    ```bash
-    python main.py predict
-    ```
-The output image will be saved in the `predictions/` folder.
+### 3. Generate Final Predictions and New Images
+This loads both trained models to run the final evaluation and generation.
+```bash
+python main.py predict --local
+```
+The output images will be saved in the `predictions/` folder.
 
 ---
 
 ## 6. Example Inputs, Outputs, and Plots
 
 ### Training Progress
-The model's performance was tracked during training. Periodically, a labeled comparison of original and reconstructed images was saved. Below is an example from a late training epoch, showing that the model has learned to reconstruct the key anatomical structures accurately.
+The model's performance was tracked during training. The plot below shows the training loss, validation loss, and validation SSIM over the epochs.
 
-![Training Progress Example](./checkpoints/snehin_HipMRI_VQVAE/reconstruction_epoch_XX_labeled.png)
+![Training Progress Plot](./checkpoints/snehin_HipMRI_VQVAE/snehin_HipMRI_VQVAE_training_progress.png)
 
-*(**Action:** After training, replace "XX" with an epoch number (e.g., 40) and make sure the file exists.)*
+*(**Action:** After training, make sure this file exists and is embedded here.)*
 
 ### Final Output
-The `predict.py` script produces a final, labeled image that demonstrates the model's full capabilities. It includes original images, their high-quality reconstructions, and entirely new images generated from a random latent prior.
+The `predict.py` script produces a final, comprehensive analysis of the model's performance on the unseen test set.
 
-![Final Prediction and Generation Output](./predictions/snehin_HipMRI_VQVAE_generation_result_labeled.png)
+**Overall Test Set SSIM:** **[Your Final SSIM Score, e.g., 0.8808]**
 
-*(**Action:** After running predict, make sure this file exists and is embedded here.)*
+**Best and Worst Case Analysis:**
+The script saves the top 10 best and worst reconstructions, which provides insight into the model's strengths and weaknesses.
 
-The final SSIM score achieved on the reconstructed batch was **[Your Final SSIM Score, e.g., 0.7345]**, successfully surpassing the 0.65 target. The generated images, while not perfect anatomical structures, demonstrate that the model has learned a meaningful distribution of features, as they contain textures and shapes characteristic of the training data rather than just random noise.
+![Best 10 Reconstructions](./predictions/best_10_reconstructions.png)
+![Worst 10 Reconstructions](./predictions/worst_10_reconstructions.png)
+
+**Final Generated Images:**
+These are completely new images generated from scratch by the PixelCNN and VQ-VAE decoder.
+
+![Final Generated Images](./predictions/pixelcnn_generated_images.png)
+
+*(**Action:** After running predict, make sure these files exist and are embedded here.)*
+
+---
+## 7. References
+[1] Koo, J. (2021). *An Overview on VQ-VAE : Learning Discrete Representation Space*. Analytics Vidhya. [https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337](https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337)
