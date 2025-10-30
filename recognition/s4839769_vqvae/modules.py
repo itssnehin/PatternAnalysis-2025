@@ -1,5 +1,25 @@
-# modules.py
-
+# ======================================================================================
+# AI Declaration
+#
+# This script was developed with the assistance of an AI language model.
+#
+# Tasks performed by the AI:
+# - Generated the PyTorch `nn.Module` classes for the Encoder, Decoder, and VQ-VAE.
+# - Implemented the Residual Block architecture based on a high-level description.
+# - Wrote the forward pass logic for the Vector Quantizer, including the calculation of
+#   distances, finding nearest neighbors, and computing the VQ loss.
+# - Implemented the complete PixelCNN architecture, including the MaskedConv2d layer
+#   to enforce the autoregressive property.
+#
+# Prompt:
+# "Implement a VQ-VAE model in PyTorch. The Encoder and Decoder should both use two
+# downsampling/upsampling convolutional layers and a stack of two Residual Blocks.
+# Also, implement a separate PixelCNN model that uses a stack of 7 masked convolutional
+# layers to predict codebook indices. The MaskedConv2d layer should have both 'A' and 'B'
+# mask types."
+#
+# LLM Used: Gemini 2.5 Pro
+# ======================================================================================
 """
 Core components of the VQ-VAE and PixelCNN models.
 - VQ-VAE: Encoder, Decoder, VectorQuantizer, Residual Blocks.

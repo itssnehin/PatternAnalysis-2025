@@ -1,5 +1,24 @@
-# train_pixelcnn.py
-
+# ======================================================================================
+# AI Declaration
+#
+# This script was developed with the assistance of an AI language model.
+#
+# Tasks performed by the AI:
+# - Generated the boilerplate for the PixelCNN training script.
+# - Wrote the main training loop, which uses the VQ-VAE's `get_code_indices` method
+#   to generate targets for the PixelCNN.
+# - Implemented the Cross-Entropy loss calculation for the autoregressive task.
+# - Integrated a `CosineAnnealingLR` learning rate scheduler.
+#
+# Prompts:
+# "Write a PyTorch script to train a PixelCNN model. It should first load and freeze the
+# pre-trained VQ-VAE from train.py. In the training loop, for each batch of images, it should use the
+# VQ-VAE's encoder to get the discrete latent codes. These codes will be the targets
+# for the PixelCNN. The loss function should be Cross-Entropy. Also, add a Cosine
+# Annealing learning rate scheduler that decays over 50 epochs."
+#
+# LLM Used: Gemini 2.5 Pro
+# ======================================================================================
 """
 The training script for the PixelCNN prior model.
 - Loads a pre-trained VQ-VAE model.

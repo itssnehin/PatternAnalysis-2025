@@ -1,4 +1,24 @@
-# predict.py
+# ======================================================================================
+# AI Declaration
+#
+# This script was developed with the assistance of an AI language model.
+#
+# Tasks performed by the AI:
+# - Wrote the initial script to load a trained model and reconstruct a single batch.
+# - Implemented the autoregressive sampling loop to generate new images using the PixelCNN.
+# - Implemented the logic to calculate per-image SSIM, sort the results, and identify the
+#   10 best and 10 worst performing images.
+#
+# Prompt:
+# "Create a Python script using PyTorch and Pillow to evaluate a trained VQ-VAE.
+# It should iterate through the entire test set, calculate the SSIM for each image,
+# and store the results. After, it should find the 10 best and 10 worst images based on SSIM.
+# Finally, create and save a PNG that shows a grid of the 'best' original images
+# and their reconstructions, with a main title above the grid and the 'subject ID' label
+# centered above each individual image."
+#
+# LLM Used: Gemini 2.5 Pro
+# ======================================================================================
 
 """
 Performs a comprehensive evaluation of the trained VQ-VAE model on the entire test set.

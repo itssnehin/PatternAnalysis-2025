@@ -8,9 +8,7 @@ import torch
 import os # Import os for path joining
 
 class Config:
-    # --- General Project Settings ---
     DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # SEED = 42
     PROJECT_NAME = "snehin_HipMRI_VQVAE"
     
     # --- Dataset Settings ---

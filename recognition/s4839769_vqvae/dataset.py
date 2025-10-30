@@ -1,3 +1,21 @@
+# ======================================================================================
+# AI Declaration
+#
+# This script was developed with the assistance of an AI language model.
+#
+# Tasks performed by the AI:
+# - Generated the boilerplate structure for the PyTorch `Dataset` and `DataLoader`.
+# - Implemented the logic for loading NIfTI files using the `nibabel` library.
+# Prompt:
+# "Write a PyTorch Dataset class for NIfTI files (.nii.gz). It should load an image
+# using nibabel, convert it to a tensor, and apply a transformation pipeline to resize
+# it to 128x128 and normalize it to the range [-1, 1]. The __getitem__ method should
+# return the image tensor, its full filename, and a 'subject label' extracted from the
+# first two parts of the filename."
+#
+# LLM Used: Gemini 2.5 Pro
+# ======================================================================================
+
 """
 Data loading and preprocessing for the HipMRI 2D slices dataset.
 - Loads Nifti files.

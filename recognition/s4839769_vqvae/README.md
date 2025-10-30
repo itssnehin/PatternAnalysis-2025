@@ -23,7 +23,29 @@ The model is a two-stage pipeline designed to first learn a "vocabulary" of visu
 The first stage learns a discrete latent representation of the HipMRI slices.  
 It consists of an encoder, vector quantizer, and decoder. The encoder compresses each image, the quantizer replaces latent vectors with the nearest entries from a learnable codebook, and the decoder reconstructs the input.
 
-Training minimises the sum of:
+Training minimises the Loss function \(\mathcal{L}_{\text{total}}\) :
+
+\[\mathcal{L}_{\text{total}} = \underbrace{\|x - \hat{x}\|_2^2}_{\text{reconstruction}} 
++ 
+\underbrace{\|\text{sg}[z_e(x)] - e\|_2^2}_{\text{codebook}} 
++ 
+\beta \, \underbrace{\|z_e(x) - \text{sg}[e]\|_2^2}_{\text{commitment}}
+\]
+
+where  
+- \(x\) is the input image,  
+- \(\hat{x}\) is the reconstructed output,  
+- \(z_e(x)\) is the encoder output,  
+- \(e\) is the nearest embedding vector from the codebook,  
+- \(\text{sg}[\cdot]\) denotes the stop-gradient operator (no gradient passed), and  
+- \(\beta\) is the commitment cost, set to 0.25 in this project.
+
+The total loss balances accurate reconstruction with stable and efficient codebook usage.
+
+
+
+
+
 - **Reconstruction loss** using Mean Squared Error (MSE) between original and reconstructed images.
 - **Vector-quantisation loss** that aligns encoder outputs with the codebook.
 - **Commitment loss** weighted by the `commitment_cost` parameter (0.25) to encourage consistent usage of the codes in the codeblock.
@@ -104,8 +126,7 @@ The dataset is pre-split into `train`, `validate`, and `test` directories. This 
 ---
 
 ## 3. Project Structure
-The project is organized into a modular structure for clarity and maintainability.
-
+The repository follows a modular design separating configuration, data loading, model definition, training, and evaluation to an easy to maintain and configure system.
 ```
 /
 ├── diagrams/               # Folder for storing diagrams like vqvae_diagram.png
@@ -118,6 +139,7 @@ The project is organized into a modular structure for clarity and maintainabilit
 ├── train.py                # The VQ-VAE training and validation loop
 ├── train_pixelcnn.py       # The PixelCNN training loop
 ├── predict.py              # Script to load models and generate final results
+├── requirements.txt        # Library dependencies for reproducibility
 └── README.md               # This file
 ```
 
@@ -125,58 +147,67 @@ The project is organized into a modular structure for clarity and maintainabilit
 
 ## 4. Dependencies and Reproducibility
 
-### Dependencies
-To ensure reproducibility, all required Python libraries and their versions are listed below.
-
-| Dependency   | Version |
-|--------------|---------|
-| torch        | [e.g., 2.0.1] |
-| torchvision  | [e.g., 0.15.2]|
-| torchmetrics | [e.g., 1.0.0] |
-| Pillow       | [e.g., 10.1.0]|
-| nibabel      | [e.g., 5.1.0] |
-| tqdm         | [e.g., 4.65.0]|
-| matplotlib   | [e.g., 3.7.1] |
-| numpy        | [e.g., 1.25.0]|
-
-*(**Action:** Run `pip freeze` to get your exact versions and fill them in.)*
-
 ### Environment Setup
-1.  Create a Conda or venv environment.
-2.  Install the required packages:
-    ```bash
-    pip install torch torchvision torchmetrics Pillow nibabel tqdm matplotlib numpy
-    ```
+The project uses a Conda-managed environment for full reproducibility.  
+All dependencies, including Python version and library specifications, are defined in the `environment.yml` file.
 
+To recreate the environment:
+
+```bash
+conda env create -f environment.yml
+conda activate vqvae_env
+```
+The environment can be exported from an existing setup using:
+
+```bash
+conda env export --no-builds > environment.yml
+```
+### Reproducibility Notes
+- All hyperparameters and training settings are defined in `config.py`, which controls both the VQ-VAE and PixelCNN stages.  
+- The same configuration file can be used on local machines or the Rangpur HPC cluster for consistent experiments.  
+- The Conda environment defined in `environment.yml` ensures version-controlled dependencies across systems.  
+- Model checkpoints, loss plots, and SSIM metrics are automatically saved in the `checkpoints/` directory for reproducibility and review.  
+- The SSIM metric uses `data_range=2.0` to match the normalized image range of [-1, 1].  
 ---
 
 ## 5. Usage Instructions
-The project is run from the terminal in a three-step process.
 
-### 1. Train the VQ-VAE
-This learns the visual codebook.
+The project is run from the terminal using `main.py`, which supports three modes:  
+`train`, `train_pixelcnn`, and `predict`.
+
+### Running on Rangpur (HPC)
+On Rangpur, no additional arguments are required because the dataset path and worker settings are already configured for the cluster.
+
 ```bash
+# Train the VQ-VAE model
+python main.py train
+
+# Train the PixelCNN prior
+python main.py train_pixelcnn
+
+# Generate reconstructed and new images
+python main.py predict
+```
+### Running on a Local Machine
+
+When running locally, add the `--local` flag to use the local dataset path. E.g.
+```bash
+# Train the VQ-VAE model locally
 python main.py train --local
-```
 
-### 2. Train the PixelCNN Prior
-This learns the structure of the latent space.
-```bash
+# Train the PixelCNN prior locally
 python main.py train_pixelcnn --local
-```
 
-### 3. Generate Final Predictions and New Images
-This loads both trained models to run the final evaluation and generation.
-```bash
+# Generate reconstructed and new images locally
 python main.py predict --local
 ```
-The output images will be saved in the `predictions/` folder.
+All outputs (plots, checkpoints, and generated images) are saved automatically to the `checkpoints/` and `predictions/` directories
 
-
+---
 ## 6. Results and Analysis
 
 ### Training Progress
-The VQ-VAE model was trained until the early stopping condition was met, indicating that it reached the target performance efficiently. The plot below shows the training loss, validation loss, and validation SSIM over the course of training. The steady decrease in loss and corresponding increase in SSIM demonstrate a healthy and stable training process.
+The VQ-VAE model was trained until the early stopping condition was met, indicating that it reached the target performance efficiently. The plot below shows the training loss, validation loss, and validation SSIM over the course of training. There is a big spike in loss at 10 epochs followed by a steady decrease and corresponding increase in SSIM. This shows that the model initially encountered an unstable loss landscape and quickly recovered. The validation SSIM score steadily increased till ~0.85 and plateaued for the last few epochs.
 
 ![Training Progress Plot](./checkpoints/snehin_HipMRI_VQVAE_training_progress.png)
 
@@ -185,7 +216,7 @@ The fully trained model was evaluated on the unseen test set to provide a final,
 
 **Overall Test Set SSIM:** **0.8762**
 
-This result surpasses the project's target of 0.65, confirming the model's strong ability to accurately reconstruct high-fidelity images as required.
+This result surpasses the project's target of 0.60, confirming the model's strong ability to accurately reconstruct high-fidelity images as required.
 
 ### Qualitative Analysis: Best and Worst Cases
 To gain deeper insight into the model's behavior, the `predict.py` script automatically identifies and saves the 10 best and 10 worst reconstructions from the test set based on their individual SSIM scores.
@@ -194,16 +225,47 @@ To gain deeper insight into the model's behavior, the `predict.py` script automa
 *The best-case reconstructions are nearly indistinguishable from the originals, showing the model's success in capturing key anatomical structures and textures.*
 
 ![Worst 10 Reconstructions](./predictions/worst_10_reconstructions.png)
-*The worst-case images, while still structurally coherent, highlight areas for potential improvement. The model struggles most with images that have very fine, low-contrast details or slightly unusual anatomical presentations.*
+*The worst-case images, are still structurally coherent, but contain for noise and struggle to capture finer grained complexities in the original images*
+
+Interestingly the best images and worst images seem to be grouped as similar type of images. This suggests that the model is better at reconstructing certain type of MRI images over others depending on the label.
 
 ### Final Generated Images
-These are completely new images generated from scratch. The trained PixelCNN creates a coherent latent map, which the VQ-VAE decoder then transforms into an image. These samples demonstrate that the model has learned the underlying statistical distribution of the MRI data, producing novel images that respect the learned anatomical patterns, rather than just random noise.
+The final PixelCNN-generated samples (shown below) shows some of the broad  structures similar to the HipMRI data but lack finer anatomical detail like in the originals above. This indicates that the model learned the overall distribution of tissue textures and contrasts but not the high-frequency boundaries or organ edges present in real slices.
 
-![Final Generated Images](./predictions/pixelcnn_generated_images.png)
+<p align="center">
+<img src="./predictions/pixelcnn_generated_images.png" alt="PixelCNN generated MRI images" width="95%">
+</p>
+
+This limitation likely arises from the small latent grid (32×32 for 128×128 inputs) and the discrete codebook bottleneck, which compresses fine spatial information.  
+Possible improvements include using a deeper PixelCNN, increasing the embedding dimension, or adopting a hierarchical approach such as VQ-VAE-2 to capture multi-scale features.
+
 
 ---
-## 7. References
+## 7. Future Work
+
+Several extensions could improve both reconstruction quality and generative fidelity:
+
+7.1. **Hierarchical VQ-VAE (VQ-VAE-2)**  
+   Introduce a multi-scale latent hierarchy to capture global and local structures separately, allowing finer detail to be generated better.
+
+7.2. **Conditional Generation**  
+   Add conditioning variables such as slice index or patient label to guide the PixelCNN, producing more coherent and anatomically consistent outputs.
+
+7.3. **Dataset Augmentation and Balancing**  
+   Expand the dataset or apply contrast and orientation augmentations to improve codebook diversity and generalization ability of the model.
+
+---
+## 8. Declaration of AI Assistance
+
+The Python source files for this project (`config.py`, `dataset.py`, `modules.py`, `train.py`, `train_pixelcnn.py`, `predict.py`, and `main.py`) were developed with assistance from **Google Gemini 2.5 Pro** [3].  
+The model was used to generate and refine code structure and documentation. See each file for more information. 
+
+---
+## 9. References
 
 [1] Australian e-Health Research Centre, CSIRO. *HipMRI Study on Prostate Cancer (open dataset)*. DOI: [10.25919/45t8-p065](https://doi.org/10.25919/45t8-p065)
 
 [2] Koo, J. (2021). *An Overview on VQ-VAE : Learning Discrete Representation Space*. Analytics Vidhya. [https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337](https://medium.com/analytics-vidhya/an-overview-on-vq-vae-learning-discrete-representation-space-8b7e56cc6337)
+
+[3] Google DeepMind. *Gemini 2.5 Pro* [Large Language Model].  
+Available at: [https://deepmind.google/technologies/gemini/](https://deepmind.google/technologies/gemini/)

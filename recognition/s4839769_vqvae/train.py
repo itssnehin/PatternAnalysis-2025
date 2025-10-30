@@ -1,4 +1,29 @@
-# train.py
+# ======================================================================================
+# AI Declaration
+#
+# This script was developed with the assistance of an AI language model.
+#
+# Tasks performed by the AI:
+# - Generated the main training loop structure, including the epoch and batch iteration.
+# - Implemented the logic for the forward pass, loss calculation (MSE), backpropagation,
+#   and optimizer step.
+# - Wrote the validation loop, including the use of `torch.no_grad()`.
+# - Implemented advanced features based on prompts, including:
+#   - Learning rate warm-up and gradient clipping to stabilize training.
+#   - "Patience-based" early stopping by tracking the best SSIM score.
+#   - Automatic saving of the best model and periodic visual checkpoints.
+#   - A plotting function using Matplotlib to visualize training history.
+#
+# Prompt:
+# "Write a PyTorch training script for a VQ-VAE. The training loop should calculate a
+# reconstruction loss using MSE. The validation loop should calculate both MSE and SSIM.
+# Implement a feature to save the model checkpoint only when the validation SSIM improves.
+# Also, add gradient clipping with a max norm of 1.0 and a 3-epoch linear learning
+# rate warm-up at the beginning of training."
+#
+# LLM Used: Gemini 2.5 Pro
+# ======================================================================================
+
 """
 The core training and validation loop for the VQ-VAE model.
 - Uses a simple, stable MSE loss for reconstruction.

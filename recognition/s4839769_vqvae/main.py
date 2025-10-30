@@ -1,5 +1,22 @@
-# main.py
-
+# ======================================================================================
+# AI Declaration
+#
+# This script was developed with the assistance of an AI language model.
+#
+# Tasks performed by the AI:
+# - Generated the initial boilerplate for command-line argument parsing using `argparse`.
+# - Refactored the script to include different execution modes ('train', 'train_pixelcnn', 'predict').
+# - Added the '--local' flag logic to dynamically switch between cluster and local configurations.
+# - Wrote and refined docstrings and comments for clarity.
+#
+# Prompt:
+# "Create a main.py script using Python's argparse that acts as an entry point for my
+# deep learning project. It should accept three modes: 'train', 'train_pixelcnn', and
+# 'predict'. Also, add a '--local' flag that, when present, changes the value of
+# 'cfg.DATASET_ROOT' to a local path and sets 'cfg.NUM_WORKERS' to 0."
+#
+# LLM Used: Gemini 2.5 Pro
+# ======================================================================================
 """
 Main entry point for the VQ-VAE project on the HipMRI dataset.
 This script orchestrates the training and prediction workflows.
@@ -78,7 +95,6 @@ def main():
     # --- Mode Execution ---
     if args.mode == 'train':
         try:
-            # --- UPDATE THIS LINE ---
             # Unpack all three loaders, even though train_model only needs two.
             train_loader, val_loader, _ = get_dataloaders()
             
@@ -89,7 +105,6 @@ def main():
             predict()
         except Exception as e: print(f"\nAn error occurred during VQ-VAE training: {e}")
             
-    # --- NEW MODE ---
     elif args.mode == 'train_pixelcnn':
         try:
             train_pixelcnn()
@@ -98,7 +113,6 @@ def main():
         except Exception as e: print(f"\nAn error occurred during PixelCNN training: {e}")
     elif args.mode == 'predict':
         try:
-            # (Predict logic is unchanged for now, we will update it next)
             predict()
         except Exception as e: print(f"\nAn error occurred during prediction: {e}")
 
