@@ -17,7 +17,7 @@ The first stage uses a **VQ-VAE**, a type of autoencoder that excels at producin
 
 The VQ-VAE is trained to make the reconstructed image as close as possible to the original. After training, the codebook contains a rich vocabulary of all the essential visual patterns (textures, edges, shapes) found in the MRI scans.
 
-![VQ-VAE Architecture Diagram](./diagrams/vqvae_diagram.png)
+![VQ-VAE Architecture Diagram](./diagrams/vqvae_diagram.jpg)
 *(Diagram sourced from Analytics Vidhya [1])*
 
 #### Stage 2: Learning the Spatial Structure (PixelCNN)
