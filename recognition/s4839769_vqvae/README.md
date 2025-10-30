@@ -25,8 +25,9 @@ While the VQ-VAE learns *what* to draw, it doesn't learn *how* to arrange the fe
 1.  **Training:** After the VQ-VAE is trained and frozen, its encoder is used to convert the entire training dataset into a set of discrete latent maps (grids of codebook indices). The PixelCNN is then trained on these maps.
 2.  **Autoregression:** The PixelCNN learns to predict the next code index in a grid based on all the previous indices "above and to the left" of it. It learns the statistical patterns and spatial relationships of the visual vocabulary.
 
-
-<img src="./diagrams/pixelcnn.png" alt="PixelCNN Autoregressive Process" style="width:20%; height:auto;">
+<p align="center">
+<img src="./diagrams/pixelcnn.png" alt="PixelCNN Autoregressive Process" style="width:25%; height:auto;">
+</p>
 
 During the final generation step, the trained PixelCNN creates a completely new, structured latent map from scratch, one "pixel" (code index) at a time. This synthetic map is then passed to the VQ-VAE's decoder to produce a novel, high-quality image that respects the learned spatial patterns of the original dataset.
 
@@ -39,7 +40,7 @@ The model is trained on the **HipMRI Study on Prostate Cancer** dataset, which c
 
 ### Pre-processing
 The following pre-processing steps are applied in `dataset.py`:
-1.  **Resizing:** All images are resized to a uniform dimension of **128x128 pixels** to ensure consistent input for the model.
+1.  **Resizing:** All images are resized to a uniform dimension of **128x128 pixels** to keep consistent input  for the model.
 2.  **Normalization:** Pixel values are normalized to the range `[-1, 1]`. This is a standard practice that helps stabilize training and aids the model's convergence.
 
 *(Reference: The normalization method is a common technique in deep learning for image data.)*
@@ -118,34 +119,34 @@ python main.py predict --local
 ```
 The output images will be saved in the `predictions/` folder.
 
----
 
-## 6. Example Inputs, Outputs, and Plots
+## 6. Results and Analysis
 
 ### Training Progress
-The model's performance was tracked during training. The plot below shows the training loss, validation loss, and validation SSIM over the epochs.
+The VQ-VAE model was trained until the early stopping condition was met, indicating that it reached the target performance efficiently. The plot below shows the training loss, validation loss, and validation SSIM over the course of training. The steady decrease in loss and corresponding increase in SSIM demonstrate a healthy and stable training process.
 
-![Training Progress Plot](./checkpoints/snehin_HipMRI_VQVAE/snehin_HipMRI_VQVAE_training_progress.png)
+![Training Progress Plot](./checkpoints/snehin_HipMRI_VQVAE_training_progress.png)
 
-*(**Action:** After training, make sure this file exists and is embedded here.)*
+### Final Performance on Test Set
+The fully trained model was evaluated on the unseen test set to provide a final, unbiased measure of its performance.
 
-### Final Output
-The `predict.py` script produces a final, comprehensive analysis of the model's performance on the unseen test set.
+**Overall Test Set SSIM:** **0.8762**
 
-**Overall Test Set SSIM:** **[Your Final SSIM Score, e.g., 0.8808]**
+This result surpasses the project's target of 0.65, confirming the model's strong ability to accurately reconstruct high-fidelity images as required.
 
-**Best and Worst Case Analysis:**
-The script saves the top 10 best and worst reconstructions, which provides insight into the model's strengths and weaknesses.
+### Qualitative Analysis: Best and Worst Cases
+To gain deeper insight into the model's behavior, the `predict.py` script automatically identifies and saves the 10 best and 10 worst reconstructions from the test set based on their individual SSIM scores.
 
 ![Best 10 Reconstructions](./predictions/best_10_reconstructions.png)
-![Worst 10 Reconstructions](./predictions/worst_10_reconstructions.png)
+*The best-case reconstructions are nearly indistinguishable from the originals, showing the model's success in capturing key anatomical structures and textures.*
 
-**Final Generated Images:**
-These are completely new images generated from scratch by the PixelCNN and VQ-VAE decoder.
+![Worst 10 Reconstructions](./predictions/worst_10_reconstructions.png)
+*The worst-case images, while still structurally coherent, highlight areas for potential improvement. The model struggles most with images that have very fine, low-contrast details or slightly unusual anatomical presentations.*
+
+### Final Generated Images
+These are completely new images generated from scratch. The trained PixelCNN creates a coherent latent map, which the VQ-VAE decoder then transforms into an image. These samples demonstrate that the model has learned the underlying statistical distribution of the MRI data, producing novel images that respect the learned anatomical patterns, rather than just random noise.
 
 ![Final Generated Images](./predictions/pixelcnn_generated_images.png)
-
-*(**Action:** After running predict, make sure these files exist and are embedded here.)*
 
 ---
 ## 7. References
