@@ -2,6 +2,5 @@
 /HipMRI_Study_open/
 /checkpoints/
 
-
-
+# Keep images though
 !/checkpoints/snehin_HipMRI_VQVAE/*.png
