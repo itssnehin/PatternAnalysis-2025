@@ -8,7 +8,7 @@ Performs a comprehensive evaluation of the trained VQ-VAE model on the entire te
 """
 import os
 import torch
-from torchvision.utils import make_grid
+from torchvision.utils import make_grid, save_image
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms as transforms
