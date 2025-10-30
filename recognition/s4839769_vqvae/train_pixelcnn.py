@@ -40,15 +40,17 @@ def train_pixelcnn():
     pixelcnn_model = PixelCNN(num_embeddings=cfg.NUM_EMBEDDINGS).to(device)
     optimizer = torch.optim.Adam(pixelcnn_model.parameters(), lr=cfg.LEARNING_RATE)
     
-    # We only need the training data loader
-    train_loader, _ = get_dataloaders()
+    # Unpack all three loaders, but ignore the validation and test loaders.
+    train_loader, _, _ = get_dataloaders()
+
     
     # --- 3. Training Loop for PixelCNN ---
     best_loss = float('inf')
     # The number of epochs for PixelCNN can be different, let's use a config value
     # or a hardcoded value for simplicity. 50 epochs is a good start.
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     num_epochs = 50 
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
     
     print("Starting PixelCNN training...")
     for epoch in range(1, num_epochs + 1):

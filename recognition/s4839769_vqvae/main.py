@@ -25,6 +25,8 @@ from train import train_model
 from predict import predict
 from train_pixelcnn import train_pixelcnn # NEW IMPORT
 from config import cfg
+from dataset import get_dataloaders
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -67,10 +69,8 @@ def main():
         print(f"Using cluster dataset path: {cfg.DATASET_ROOT}")
 
     print("=" * 50)
-
     # --- Mode Execution ---
     if args.mode == 'train':
-        if args.mode == 'train':
         try:
             # --- UPDATE THIS LINE ---
             # Unpack all three loaders, even though train_model only needs two.
@@ -90,7 +90,6 @@ def main():
             print("\nPixelCNN training finished. Now you can generate images by running:")
             print("python main.py predict --local")
         except Exception as e: print(f"\nAn error occurred during PixelCNN training: {e}")
-
     elif args.mode == 'predict':
         try:
             # (Predict logic is unchanged for now, we will update it next)
