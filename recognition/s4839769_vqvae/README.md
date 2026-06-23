@@ -23,22 +23,23 @@ The model is a two-stage pipeline designed to first learn a "vocabulary" of visu
 The first stage learns a discrete latent representation of the HipMRI slices.  
 It consists of an encoder, vector quantizer, and decoder. The encoder compresses each image, the quantizer replaces latent vectors with the nearest entries from a learnable codebook, and the decoder reconstructs the input.
 
-Training minimises the Loss function \(\mathcal{L}_{\text{total}}\) :
+Training minimises the Loss function $\mathcal{L}_{\text{total}}$:
 
-\[\mathcal{L}_{\text{total}} = \underbrace{\|x - \hat{x}\|_2^2}_{\text{reconstruction}} 
-+ 
-\underbrace{\|\text{sg}[z_e(x)] - e\|_2^2}_{\text{codebook}} 
-+ 
+$$
+\mathcal{L}_{\text{total}} = \underbrace{\|x - \hat{x}\|_2^2}_{\text{reconstruction}}
++
+\underbrace{\|\text{sg}[z_e(x)] - e\|_2^2}_{\text{codebook}}
++
 \beta \, \underbrace{\|z_e(x) - \text{sg}[e]\|_2^2}_{\text{commitment}}
-\]
+$$
 
 where  
-- \(x\) is the input image,  
-- \(\hat{x}\) is the reconstructed output,  
-- \(z_e(x)\) is the encoder output,  
-- \(e\) is the nearest embedding vector from the codebook,  
-- \(\text{sg}[\cdot]\) denotes the stop-gradient operator (no gradient passed), and  
-- \(\beta\) is the commitment cost, set to 0.25 in this project.
+- $x$ is the input image,  
+- $\hat{x}$ is the reconstructed output,  
+- $z_e(x)$ is the encoder output,  
+- $e$ is the nearest embedding vector from the codebook,  
+- $\text{sg}[\cdot]$ denotes the stop-gradient operator (no gradient passed), and  
+- $\beta$ is the commitment cost, set to 0.25 in this project.
 
 The total loss balances accurate reconstruction with stable and efficient codebook usage.
 
